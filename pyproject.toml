@@ -1,6 +1,6 @@
 [project]
 name = "pegasus-bridge"
-version = "0.2.0"
+version = "0.3.0"
 description = "Windows PegasusEditor CLI and MCP adapter with backed-up UI template updates"
 readme = "README.md"
 authors = [

@@ -39,6 +39,12 @@ def main():
     apply.add_argument('--template-file', required=True)
     apply.add_argument('--expected-sha256', required=True)
     apply.add_argument('--backup-directory', required=True)
+    scene = commands.add_parser('apply-scene')
+    scene.add_argument('game_id', type=int)
+    scene.add_argument('scene_id', type=int)
+    scene.add_argument('script_path')
+    scene.add_argument('--expected-sha256', required=True)
+    scene.add_argument('--backup-directory', required=True)
     args = parser.parse_args()
     bridge = Pegasus(args.install_dir, args.data_dir)
     try:
@@ -57,6 +63,9 @@ def main():
         elif args.command == 'upload-image':
             from .ui import UIService
             result = UIService(bridge).upload_image(args.game_id, args.image_path, args.alias, args.category_id, args.checkpoint)
+        elif args.command == 'apply-scene':
+            from .scene import SceneService
+            result = SceneService(bridge).apply_scene(args.game_id, args.scene_id, args.script_path, args.expected_sha256, args.backup_directory)
         elif args.command == 'apply-ui':
             from .ui import UIService
             template = json.loads(Path(args.template_file).read_text(encoding='utf-8'))

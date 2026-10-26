@@ -12,9 +12,9 @@ async def main():
             await session.initialize()
             tools = await session.list_tools()
             names = [tool.name for tool in tools.tools]
-            assert len(names) == 10, names
+            assert len(names) == 11, names
             by_name = {tool.name: tool for tool in tools.tools}
-            for name in ('pegasus_upload_image', 'pegasus_apply_ui_template'):
+            for name in ('pegasus_upload_image', 'pegasus_apply_ui_template', 'pegasus_apply_scene'):
                 assert by_name[name].annotations.readOnlyHint is False
                 assert 'game_id' in by_name[name].inputSchema['required']
             assert by_name['pegasus_apply_ui_template'].annotations.destructiveHint is True

@@ -18,7 +18,7 @@ Windows 天马编辑器（默认 `C:\APP\PegasusEditor`）的非官方基础适�
 | PNG 素材上传 | `upload-image` | `pegasus_upload_image` | 2026-10-26 通过 MCP 上传 13 张适配素材 |
 | 基本 UI 分类保存 | `apply-ui` | `pegasus_apply_ui_template` | 2026-10-26 通过 MCP 更新 playback 并读回一致 |
 
-**限制：** 在线操作使用 `TOKEN` Cookie 与 CSRF 查询参数，写入成功业务码必须为 `200000`。会话过期可能返回 `502001`。0.2.0 新增图片上传和基本 UI 保存；仍不支持剧情修改、发布或 Unity 内部对象控制。`catalog` 是指令分类缓存，不是场景剧情内容。`recent-games` 是历史记录，不是账号全部作品。响应保留后台结构，`scenes` 的 data、UI 分类中的 command 和 `ui_template` 中的 template 可能是 JSON 字符串，需要再次解析。
+**限制：** 在线操作使用 `TOKEN` Cookie 与 CSRF 查询参数，写入成功业务码必须为 `200000`。会话过期可能返回 `502001`。0.3.0 支持图片上传、基本 UI 保存和带版本校验的剧情替换；不支持发布或 Unity 内部对象控制。`catalog` 是指令分类缓存，不是场景剧情内容。`recent-games` 是历史记录，不是账号全部作品。响应保留后台结构，`scenes` 的 data、UI 分类中的 command 和 `ui_template` 中的 template 可能是 JSON 字符串，需要再次解析。
 
 ## 使用
 
@@ -144,6 +144,18 @@ $expectedUiHash = (Get-Content '.\exports\playback.sha256' -Raw).Trim()
 
 `pegasus_apply_ui_template` 接收 `game_id`、`section`、`template`（完整分类 JSON 对象）、`expected_sha256`、`backup_directory`。该工具标注为写操作；上传工具也不是只读操作。MCP 服务不内置逐次批准界面，授权应由调用它的用户和客户端控制。
 
+## 剧情更新
+
+`pegasus_apply_scene` / `apply-scene` 接收作品 ID、场景 ID、本地 UTF-8 `.lua` 文件、旧源码的 UTF-8 SHA-256，以及备份目录。示例：
+
+```powershell
+.\pegasus.cmd apply-scene 123456 987654 '.\scene.lua' --expected-sha256 $expectedSceneHash --backup-directory '.\exports\scene-backups'
+```
+
+先用 `read commands` 读取源代码并计算哈希。更新会保留旧代码和目标代码、重新检查版本、按 UTF-16 长度替换指令流，并读回核验；不会发布作品。编辑器须已打开目标作品，以便读取本地编辑会话。备份失败、版本冲突均拒绝写入；读回不一致不自动重试或回滚。与 UI 更新相同，后台没有原子 CAS，请避免同时编辑保存。
+
+**保存成功不代表运行验证成功。** 编辑器可能继续使用内存里的旧剧情，写入后应退出作品并重新打开，再进行运行验证。工具不验证 Lua 语法或天马指令兼容性。
+
 ## MCP 接入
 
 复制 `mcp-config.example.json` 为本地 `mcp-config.json`，将示例命令替换为实际 Python 绝对路径，再将 `mcpServers.pegasus-editor` 合并进支持该格式的 MCP 客户端配置。本地配置已加入 Git 忽略列表。其他客户端请填写：
@@ -152,7 +164,7 @@ $expectedUiHash = (Get-Content '.\exports\playback.sha256' -Raw).Trim()
 - 参数：`-m`、`pegasus_bridge.server`
 - 传输：stdio
 
-需要在线操作时，在 MCP 客户端的服务器环境变量里配置上述会话。CLI 的 PowerShell 环境不会自动传播给已经运行的桌面客户端。升级后重启或重连 MCP 服务，工具列表应包含 10 个工具。
+需要在线操作时，在 MCP 客户端的服务器环境变量里配置上述会话。CLI 的 PowerShell 环境不会自动传播给已经运行的桌面客户端。升级后重启或重连 MCP 服务，工具列表应包含 11 个工具。
 
 直接启动服务可用 `.\pegasus-mcp.cmd` 或 `uv run pegasus-mcp`；服务等待 MCP 消息，不提供交互式提示符。服务采用 [官方 MCP Python SDK](https://py.sdk.modelcontextprotocol.io/v1/) 的 FastMCP 与 stdio 传输，依赖锁定在 1.x。
 
@@ -175,6 +187,6 @@ uv run python -m unittest discover -s tests -v
 uv run python tests/smoke_mcp.py
 ```
 
-单元测试覆盖 Windows 进程枚举、脱敏、认证、读取、导出以及 UI 更新的冲突拒绝、备份失败、写后读回、无修改路径、上传凭据隔离和检查点绑定。stdio 集成测试实际启动独立 MCP 子进程，验证初始化、10 个工具发现、写工具的参数与注解、成功调用和无网络的错误调用。测试不修改云端作品。
+单元测试还覆盖剧情替换的 UTF-16 索引、备份、并发冲突和读回不一致。单元测试覆盖 Windows 进程枚举、脱敏、认证、读取、导出以及 UI 更新的冲突拒绝、备份失败、写后读回、无修改路径、上传凭据隔离和检查点绑定。stdio 集成测试实际启动独立 MCP 子进程，验证初始化、11 个工具发现、写工具的参数与注解、成功调用和无网络的错误调用。测试不修改云端作品。
 
 2026-10-26 的独立授权实测通过真实 MCP stdio 会话上传 13 张图片并更新 `playback`，读回确认目标分类一致、其他 UI 分类和剧情脚本未变化、作品仍为草稿。此记录验证接口保存，不代表完成 Unity 内的视觉验收。

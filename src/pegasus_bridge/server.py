@@ -3,6 +3,7 @@ import logging
 from mcp.server.fastmcp import FastMCP
 from .core import Pegasus
 from .ui import UIService
+from .scene import SceneService
 
 
 def create_server(bridge: Pegasus | None = None):
@@ -10,7 +11,7 @@ def create_server(bridge: Pegasus | None = None):
     # Do not let transport diagnostics expose authenticated query strings.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
-    app = FastMCP("pegasus-editor", instructions="PegasusEditor 适配层。支持读取、PNG 素材上传和带备份的基本 UI 写入；需用户授权及有效登录，不支持发布。recent_games 是历史日志。")
+    app = FastMCP("pegasus-editor", instructions="PegasusEditor 适配层。支持读取、PNG 素材上传和带备份的基本 UI 与剧情写入；需用户授权及有效登录，不支持发布。recent_games 是历史日志。")
     bridge = bridge or Pegasus()
     readonly = {"readOnlyHint": True, "destructiveHint": False}
 
@@ -63,6 +64,11 @@ def create_server(bridge: Pegasus | None = None):
     def pegasus_apply_ui_template(game_id: int, section: Literal['cover', 'configuration', 'record', 'playback', 'menu'], template: dict, expected_sha256: str, backup_directory: str) -> dict:
         """经用户授权更新一个基本 UI 分类，自动备份并读回验证。expected_sha256 是旧分类对象排序、紧凑 JSON（ensure_ascii=False）的 UTF-8 SHA256。后台无原子 CAS；编辑器应避免同时保存。可用备份 before[section] 和当前哈希进行显式恢复。"""
         return UIService(bridge).apply_template(game_id, section, template, expected_sha256, backup_directory)
+
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
+    def pegasus_apply_scene(game_id: int, scene_id: int, script_path: str, expected_sha256: str, backup_directory: str) -> dict:
+        """经授权替换一段剧情，自动备份、比对旧源码 UTF-8 SHA256 并读回验证。后台没有原子 CAS，请避免同时保存；本工具不发布作品，不保证编辑器 Lua 兼容性。"""
+        return SceneService(bridge).apply_scene(game_id, scene_id, script_path, expected_sha256, backup_directory)
 
     return app
 
