@@ -314,15 +314,17 @@ wheels = [
 
 [[package]]
 name = "pegasus-bridge"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
+    { name = "httpx" },
     { name = "mcp" },
     { name = "pywin32", marker = "sys_platform == 'win32'" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "mcp", specifier = ">=1.26,<2" },
     { name = "pywin32", marker = "sys_platform == 'win32'", specifier = ">=308" },
 ]

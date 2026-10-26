@@ -1,4 +1,4 @@
-"""Inspected Pegasus installation + explicitly authenticated, read-only HTTP adapter."""
+"""Pegasus inspection and authenticated reads; bounded UI writes live in ui.py."""
 from __future__ import annotations
 
 import json
@@ -76,8 +76,8 @@ class Pegasus:
                 "data_dir": str(self.data), "log_available": self.log.is_file(), "processes": processes,
                 "auth_configured": bool(os.environ.get("PEGASUS_TOKEN") or os.environ.get("PEGASUS_COOKIE")),
                 "allow_log_auth": os.environ.get("PEGASUS_ALLOW_LOG_AUTH") == "1",
-                "capabilities": ["launch", "diagnostics", "recent_games", "command_catalog", "read_api", "export"],
-                "limitations": ["非官方适配层；无编辑、保存、发布接口", "在线读取需要有效会话；历史日志中的会话可能失效"]}
+                "capabilities": ["launch", "diagnostics", "recent_games", "command_catalog", "read_api", "export", "upload_image", "apply_ui_template"],
+                "limitations": ["非官方适配层；仅支持基本 UI 配置写入，不支持发布", "在线操作需要有效会话；历史日志中的会话可能失效"]}
 
     def launch(self) -> dict:
         if os.name != "nt":
@@ -170,7 +170,8 @@ class Pegasus:
         game_id = positive_id(game_id)
         paths = {"game": f"/game/{game_id}", "scenes": f"/game/{game_id}/chapter/scene",
                  "variables": f"/game/{game_id}/value", "arrays": f"/game/{game_id}/array",
-                 "ui_catalog": f"/command-line/game/{game_id}/custom-ui-catalog"}
+                 "ui_catalog": f"/command-line/game/{game_id}/custom-ui-catalog",
+                 "ui_template": f"/game/{game_id}/config/template"}
         if resource == "commands":
             paths["commands"] = f"/command-line/game/{game_id}/scene/{positive_id(scene_id)}/command"
         if resource not in paths:

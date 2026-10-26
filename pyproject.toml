@@ -1,13 +1,14 @@
 [project]
 name = "pegasus-bridge"
-version = "0.1.0"
-description = "Windows PegasusEditor inspection CLI and read-only API MCP adapter"
+version = "0.2.0"
+description = "Windows PegasusEditor CLI and MCP adapter with backed-up UI template updates"
 readme = "README.md"
 authors = [
     { name = "15973081", email = "114197574+15973081@users.noreply.github.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "httpx>=0.28,<1",
     "mcp>=1.26,<2",
     "pywin32>=308 ; sys_platform == 'win32'",
 ]
