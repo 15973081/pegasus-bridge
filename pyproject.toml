@@ -1,7 +1,7 @@
 [project]
 name = "pegasus-bridge"
-version = "0.4.0"
-description = "Windows PegasusEditor CLI and MCP adapter for UI, scenes, chapters and story maps"
+version = "0.5.0"
+description = "Windows PegasusEditor CLI and MCP adapter for UI, scenes, chapters, story maps and mall editing"
 readme = "README.md"
 authors = [
     { name = "15973081", email = "114197574+15973081@users.noreply.github.com" }

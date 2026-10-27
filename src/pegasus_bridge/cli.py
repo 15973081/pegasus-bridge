@@ -22,9 +22,11 @@ def main():
     catalog.add_argument("game_id", type=int)
     for name in ("read", "export"):
         p = commands.add_parser(name)
-        p.add_argument("resource", choices=["game", "scenes", "commands", "variables", "arrays", "ui_catalog", "ui_template", "story_tree"] + (["catalog"] if name == "export" else []))
+        p.add_argument("resource", choices=["game", "scenes", "commands", "variables", "arrays", "ui_catalog", "ui_template", "story_tree", "mall_ui", "goods"] + (["catalog"] if name == "export" else []))
         p.add_argument("game_id", type=int)
         p.add_argument("--scene-id", type=int)
+        p.add_argument("--catalog-id", type=int)
+        p.add_argument("--ui-id")
         if name == "export":
             p.add_argument("--output", required=True)
     upload = commands.add_parser('upload-image')
@@ -58,6 +60,19 @@ def main():
     story.add_argument('--tree-file',required=True)
     story.add_argument('--expected-sha256',required=True)
     story.add_argument('--backup-directory',required=True)
+    mall = commands.add_parser('apply-mall-ui')
+    mall.add_argument('game_id',type=int)
+    mall.add_argument('catalog_id',type=int)
+    mall.add_argument('ui_id')
+    mall.add_argument('script_path')
+    mall.add_argument('--expected-sha256',required=True)
+    mall.add_argument('--backup-directory',required=True)
+    goods = commands.add_parser('apply-goods')
+    goods.add_argument('game_id',type=int)
+    goods.add_argument('goods_id',type=int)
+    goods.add_argument('--changes-file',required=True)
+    goods.add_argument('--expected-sha256',required=True)
+    goods.add_argument('--backup-directory',required=True)
     args = parser.parse_args()
     bridge = Pegasus(args.install_dir, args.data_dir)
     try:
@@ -70,9 +85,9 @@ def main():
         elif args.command == "catalog":
             result = bridge.command_catalog(args.game_id)
         elif args.command == "read":
-            result = bridge.read(args.resource, args.game_id, args.scene_id)
+            result = bridge.read(args.resource, args.game_id, args.scene_id, args.catalog_id, args.ui_id)
         elif args.command == "export":
-            result = bridge.export(args.resource, args.game_id, args.output, args.scene_id)
+            result = bridge.export(args.resource, args.game_id, args.output, args.scene_id, args.catalog_id, args.ui_id)
         elif args.command == 'upload-image':
             from .ui import UIService
             result = UIService(bridge).upload_image(args.game_id, args.image_path, args.alias, args.category_id, args.checkpoint)
@@ -83,6 +98,13 @@ def main():
             from .storytree import StoryTreeService
             tree=json.loads(Path(args.tree_file).read_text(encoding='utf-8'))
             result=StoryTreeService(bridge).apply(args.game_id,args.scene_id,tree,args.expected_sha256,args.backup_directory)
+        elif args.command == 'apply-mall-ui':
+            from .mall import MallUIService
+            result=MallUIService(bridge).apply_ui(args.game_id,args.catalog_id,args.ui_id,args.script_path,args.expected_sha256,args.backup_directory)
+        elif args.command == 'apply-goods':
+            from .mall import GoodsService
+            changes=json.loads(Path(args.changes_file).read_text(encoding='utf-8-sig'))
+            result=GoodsService(bridge).apply(args.game_id,args.goods_id,changes,args.expected_sha256,args.backup_directory)
         elif args.command == 'apply-scene':
             from .scene import SceneService
             result = SceneService(bridge).apply_scene(args.game_id, args.scene_id, args.script_path, args.expected_sha256, args.backup_directory)

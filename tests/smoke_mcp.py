@@ -12,9 +12,9 @@ async def main():
             await session.initialize()
             tools = await session.list_tools()
             names = [tool.name for tool in tools.tools]
-            assert len(names) == 13, names
+            assert len(names) == 15, names
             by_name = {tool.name: tool for tool in tools.tools}
-            for name in ('pegasus_upload_image', 'pegasus_apply_ui_template', 'pegasus_apply_scene', 'pegasus_ensure_chapter', 'pegasus_apply_story_tree'):
+            for name in ('pegasus_upload_image', 'pegasus_apply_ui_template', 'pegasus_apply_scene', 'pegasus_ensure_chapter', 'pegasus_apply_story_tree', 'pegasus_apply_mall_ui', 'pegasus_apply_goods'):
                 assert by_name[name].annotations.readOnlyHint is False
                 assert 'game_id' in by_name[name].inputSchema['required']
             assert by_name['pegasus_apply_ui_template'].annotations.destructiveHint is True
@@ -24,6 +24,12 @@ async def main():
             assert "installed" in payload
             bad = await session.call_tool("pegasus_read", {"resource": "commands", "game_id": 42})
             assert bad.isError
+            bad_mall = await session.call_tool('pegasus_read', {'resource': 'mall_ui', 'game_id': 42})
+            assert bad_mall.isError
+            bad_goods = await session.call_tool('pegasus_apply_goods', {
+                'game_id': 42, 'goods_id': 9, 'changes': {'description': 'unsupported'},
+                'expected_sha256': '0' * 64, 'backup_directory': 'unused-backups'})
+            assert bad_goods.isError
             bad_upload = await session.call_tool('pegasus_upload_image', {
                 'game_id': -1, 'image_path': 'missing.png', 'alias': 'test',
                 'category_id': 2, 'checkpoint': 'unused.json'})

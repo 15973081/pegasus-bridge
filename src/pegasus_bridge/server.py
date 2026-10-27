@@ -6,6 +6,7 @@ from .ui import UIService
 from .scene import SceneService
 from .chapters import ChapterService
 from .storytree import StoryTreeService
+from .mall import MallUIService, GoodsService
 
 
 def create_server(bridge: Pegasus | None = None):
@@ -13,7 +14,7 @@ def create_server(bridge: Pegasus | None = None):
     # Do not let transport diagnostics expose authenticated query strings.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
-    app = FastMCP("pegasus-editor", instructions="PegasusEditor 适配层。支持读取、PNG 素材上传和带备份的基本 UI 与剧情写入；需用户授权及有效登录，不支持发布。recent_games 是历史日志。")
+    app = FastMCP("pegasus-editor", instructions="PegasusEditor 适配层。支持读取、PNG 素材上传和带备份的 UI、剧情、章节、故事线、商城编辑；需用户授权及有效登录，不支持发布。recent_games 是历史日志。")
     bridge = bridge or Pegasus()
     readonly = {"readOnlyHint": True, "destructiveHint": False}
 
@@ -48,14 +49,14 @@ def create_server(bridge: Pegasus | None = None):
         return bridge.command_catalog(game_id)
 
     @app.tool(annotations=readonly)
-    def pegasus_read(resource: Literal["game", "scenes", "commands", "variables", "arrays", "ui_catalog", "ui_template", "story_tree"], game_id: int, scene_id: int | None = None) -> dict:
-        """从后台读取作品/场景/指令/变量/故事线；commands 与 story_tree 必须提供 scene_id。"""
-        return bridge.read(resource, game_id, scene_id)
+    def pegasus_read(resource: Literal["game", "scenes", "commands", "variables", "arrays", "ui_catalog", "ui_template", "story_tree", "mall_ui", "goods"], game_id: int, scene_id: int | None = None, catalog_id: int | None = None, ui_id: str | None = None) -> dict:
+        """从后台读取作品/场景/指令/变量/故事线；commands 与 story_tree 必须提供 scene_id；mall_ui 须提供 catalog_id 和 ui_id；goods 返回商品列表。"""
+        return bridge.read(resource, game_id, scene_id, catalog_id, ui_id)
 
     @app.tool(annotations={"destructiveHint": False})
-    def pegasus_export(resource: Literal["game", "scenes", "commands", "variables", "arrays", "ui_catalog", "ui_template", "story_tree", "catalog"], game_id: int, output: str, scene_id: int | None = None) -> dict:
+    def pegasus_export(resource: Literal["game", "scenes", "commands", "variables", "arrays", "ui_catalog", "ui_template", "story_tree", "mall_ui", "goods", "catalog"], game_id: int, output: str, scene_id: int | None = None, catalog_id: int | None = None, ui_id: str | None = None) -> dict:
         """导出一个资源到本地新 JSON 文件；已有文件不会覆盖。catalog 可离线导出。"""
-        return bridge.export(resource, game_id, output, scene_id)
+        return bridge.export(resource, game_id, output, scene_id, catalog_id, ui_id)
 
     @app.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
     def pegasus_upload_image(game_id: int, image_path: str, alias: str, category_id: Literal[1, 2], checkpoint: str) -> dict:
@@ -81,6 +82,16 @@ def create_server(bridge: Pegasus | None = None):
     def pegasus_apply_story_tree(game_id: int, scene_id: int, tree: dict, expected_sha256: str, backup_directory: str) -> dict:
         """更新场景原生故事线节点/封面/连线，先校验目标、唯一标识、连线与无环布局，再备份、检查并发及读回。独立于剧情源码；不保证原生节点支持自定义 Lua 精确跳转。哈希规则与 apply_ui_template 相同。"""
         return StoryTreeService(bridge).apply(game_id,scene_id,tree,expected_sha256,backup_directory)
+
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
+    def pegasus_apply_mall_ui(game_id: int, catalog_id: int, ui_id: str, script_path: str, expected_sha256: str, backup_directory: str) -> dict:
+        """经授权替换商城首页/商品详情/剧情锁 UI 源码。校验作品目录归属，备份、UTF-16 指令更新、并发检查和读回；哈希为旧源码 UTF-8 SHA256。不是商品数据修改，不保证 Lua 运行兼容性。"""
+        return MallUIService(bridge).apply_ui(game_id,catalog_id,ui_id,script_path,expected_sha256,backup_directory)
+
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
+    def pegasus_apply_goods(game_id: int, goods_id: int, changes: dict, expected_sha256: str, backup_directory: str) -> dict:
+        """经授权修改已存在商品的 name、price、payType。保留商品绑定和权益，备份、并发检查、读回；哈希为 goods 列表中该完整商品对象的 digest。价格单位沿用后台。说明在商品详情 UI 中编辑，不下单、不创建商品或发布作品。"""
+        return GoodsService(bridge).apply(game_id,goods_id,changes,expected_sha256,backup_directory)
 
     return app
 

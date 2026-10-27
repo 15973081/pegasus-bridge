@@ -21,8 +21,13 @@ Windows 天马编辑器（默认 `C:\APP\PegasusEditor`）的非官方基础适�
 | 创建或复用章节与场景 | `ensure-chapter` | `pegasus_ensure_chapter` | 2026-10-27 六章实测 |
 | 原生故事线读取、导出 | `read story_tree` / `export story_tree` | `pegasus_read` / `pegasus_export` | 六个场景在线读回 |
 | 原生故事线节点与连线保存 | `apply-story-tree` | `pegasus_apply_story_tree` | 2026-10-27 六章 45 节点读回，第三章实机显示确认 |
+| 商城 UI 读取、导出 | `read mall_ui` / `export mall_ui` | `pegasus_read` / `pegasus_export` | 首页、三个详情页、剧情锁在线读取 |
+| 商城 UI 源码编辑 | `apply-mall-ui` | `pegasus_apply_mall_ui` | 归属、并发、UTF-16 写入、读回模拟测试；在线未变更路径实测 |
+| 商品列表读取、导出 | `read goods` / `export goods` | `pegasus_read` / `pegasus_export` | 在线读取实测 |
+| 已有商品数据编辑 | `apply-goods` | `pegasus_apply_goods` | 模拟接口测试；尚未实际修改线上商品 |
 
-**限制：** 在线操作使用 `TOKEN` Cookie 与 CSRF 查询参数，写入成功业务码必须为 `200000`。会话过期可能返回 `502001`。0.4.0 支持图片上传、基本 UI 保存、剧情替换、章节建立及故事线保存；不支持发布或 Unity 内部对象控制。`catalog` 是指令分类缓存，不是场景剧情内容。`recent-games` 是历史记录，不是账号全部作品。响应保留后台结构，`scenes` 的 data、UI 分类中的 command 和 `ui_template` 中的 template 可能是 JSON 字符串，需要再次解析。
+**限制：** 在线操作使用 `TOKEN` Cookie 与 CSRF 查询参数，写入成功业务码必须为 `200000`。会话过期可能返回 `502001`。0.5.0 支持图片上传、基本 UI 保存、剧情替换、章节建立、故事线保存、商城 UI 和已有商品编辑；不支持发布或 Unity 内部对象控制。`catalog` 是指令分类缓存，不是场景剧情内容。`recent-games` 是历史记录，不是账号全部作品。响应保留后台结构，`scenes` 的 data、UI 分类中的 command 和 `ui_template` 中的 template 可能是 JSON 字符串，需要再次解析。
+
 
 ## 使用
 
@@ -193,6 +198,41 @@ MCP 对应 `pegasus_ensure_chapter` 和 `pegasus_apply_story_tree`；后者直�
 
 原生故事线的点击、解锁和存档行为由编辑器运行时决定；保存节点不等于将自定义 Lua 分支接入精确跳转或自动同步进度。编辑模式可能只选择节点，不执行剧情跳转。第三章的显示已实测，其他章节已读回核验；不宣称完成所有节点的原生跳转验收。
 
+## 商城 UI 与商品数据（0.5.0）
+
+商城 UI 在 `ui_catalog` 中，是 `type=12`、`mode=8` 的分类。其 `command` 是 JSON 字符串数组，包含商城首页、商品详情、剧情锁的名称和 UUID。它们使用独立 Lua 源码，不是 `apply-ui` 的基本模板分类。
+
+```powershell
+.\pegasus.cmd read ui_catalog 123456
+.\pegasus.cmd export mall_ui 123456 --catalog-id 765432 --ui-id '11111111-1111-1111-1111-111111111111' --output '.\exports\mall-before.json'
+.\pegasus.cmd read goods 123456
+.\pegasus.cmd export goods 123456 --output '.\exports\goods-before.json'
+```
+
+上面的分类 ID、UI UUID 和商品 ID 都需要从本作品的读取结果中取得。`mall_ui` 返回 `response.data.command` 和源码 `sha256`，可将源码保存为 UTF-8 `.lua` 文件，修改布局、素材引用或商品说明后提交：
+
+```powershell
+.\pegasus.cmd apply-mall-ui 123456 765432 '11111111-1111-1111-1111-111111111111' '.\mall.lua' --expected-sha256 $expectedMallHash --backup-directory '.\exports\mall-backups'
+```
+
+MCP 对应 `pegasus_apply_mall_ui(game_id, catalog_id, ui_id, script_path, expected_sha256, backup_directory)`。仅编辑已存在的商城 UI，校验它属于目标作品的商城分类；非空 Lua 文件不超过 1MB。先备份并重新校验归属和源码版本，再按 UTF-16 索引替换指令流，最后读回校验。空的原始 UI 只发送插入指令；同内容跳过写入。编辑器须先打开目标作品建立编辑会话。工具不验证 Lua 语法、运行兼容性或视觉效果，保存后须重新打开作品检查。
+
+商品修改采用局部字段对象，保留类型、商品绑定、权益与子商品配置。支持：
+
+- `name`：1–100 字符的非空名称。
+- `price`：正整数，沿用后台价格单位，不自动换算人民币。
+- `payType`：1 为仅购买一次，2 为可重复购买。后台仍可能基于商品类型拒绝修改。
+
+先对 `goods` 列表中待修改的**完整单个商品对象**计算 `pegasus_bridge.ui.digest(product)`，用作旧哈希；不要对整个列表或修改后的对象计算。将修改字段保存为 `goods-changes.json`，例如 `{"name":"调查道具","price":12}`：
+
+```powershell
+.\pegasus.cmd apply-goods 123456 246810 --changes-file '.\goods-changes.json' --expected-sha256 $expectedGoodsHash --backup-directory '.\exports\goods-backups'
+```
+
+MCP 对应 `pegasus_apply_goods(game_id, goods_id, changes, expected_sha256, backup_directory)`。修改前从作品商品列表确认归属、匹配哈希并备份，再次读取检测并发，保存后核对业务字段。修改协议字段不完整或类型为 null 的商品会被拒绝，不猜测类型。没有独立商品说明字段；说明、详情排版与图片通过对应的商城 UI Lua 编辑。当前不支持创建/删除商品、修改权益/子商品、支付下单或发布作品。
+
+两种写入都没有原子 CAS；避免编辑器同时保存。结果不确定时先读回，不自动重试或回滚。备份里的 `before` 保留原内容，可结合当前哈希显式恢复。商品编辑会改变后台数据，调用前应取得目标作品的编辑授权。
+
 ## MCP 接入
 
 复制 `mcp-config.example.json` 为本地 `mcp-config.json`，将示例命令替换为实际 Python 绝对路径，再将 `mcpServers.pegasus-editor` 合并进支持该格式的 MCP 客户端配置。本地配置已加入 Git 忽略列表。其他客户端请填写：
@@ -201,7 +241,7 @@ MCP 对应 `pegasus_ensure_chapter` 和 `pegasus_apply_story_tree`；后者直�
 - 参数：`-m`、`pegasus_bridge.server`
 - 传输：stdio
 
-需要在线操作时，在 MCP 客户端的服务器环境变量里配置上述会话。CLI 的 PowerShell 环境不会自动传播给已经运行的桌面客户端。升级后重启或重连 MCP 服务，工具列表应包含 13 个工具。
+需要在线操作时，在 MCP 客户端的服务器环境变量里配置上述会话。CLI 的 PowerShell 环境不会自动传播给已经运行的桌面客户端。升级后重启或重连 MCP 服务，工具列表应包含 15 个工具。
 
 直接启动服务可用 `.\pegasus-mcp.cmd` 或 `uv run pegasus-mcp`；服务等待 MCP 消息，不提供交互式提示符。服务采用 [官方 MCP Python SDK](https://py.sdk.modelcontextprotocol.io/v1/) 的 FastMCP 与 stdio 传输，依赖锁定在 1.x。
 
@@ -224,8 +264,10 @@ uv run python -m unittest discover -s tests -v
 uv run python tests/smoke_mcp.py
 ```
 
-单元测试还覆盖剧情替换的 UTF-16 索引、备份、并发冲突和读回不一致。单元测试覆盖 Windows 进程枚举、脱敏、认证、读取、导出以及 UI 更新的冲突拒绝、备份失败、写后读回、无修改路径、上传凭据隔离和检查点绑定。stdio 集成测试实际启动独立 MCP 子进程，验证初始化、13 个工具发现、写工具的参数与注解、成功调用和无网络的错误调用。测试不修改云端作品。
+单元测试还覆盖剧情替换的 UTF-16 索引、备份、并发冲突和读回不一致。单元测试覆盖 Windows 进程枚举、脱敏、认证、读取、导出以及 UI 更新的冲突拒绝、备份失败、写后读回、无修改路径、上传凭据隔离和检查点绑定。stdio 集成测试实际启动独立 MCP 子进程，验证初始化、15 个工具发现、写工具的参数与注解、成功调用和无网络的错误调用。测试不修改云端作品。
 
 2026-10-26 的独立授权实测通过真实 MCP stdio 会话上传 13 张图片并更新 `playback`，读回确认目标分类一致、其他 UI 分类和剧情脚本未变化、作品仍为草稿。此记录验证接口保存，不代表完成 Unity 内的视觉验收。
 
 2026-10-27：44 项单元测试及 13 工具的真实 MCP stdio 集成检查通过；新增章节复用、目标归属、空场景写入、故事线无环校验、并发冲突和读回失败覆盖。
+
+2026-10-27 商城升级：66 项单元测试和 15 工具 MCP stdio 检查通过。真实 MCP 会话读取五个商城 UI，并验证同内容保存不发起写入。目标作品商品列表为空，商品修改仅通过模拟接口验证，未创建测试商品或改价。

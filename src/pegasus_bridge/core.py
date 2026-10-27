@@ -76,8 +76,8 @@ class Pegasus:
                 "data_dir": str(self.data), "log_available": self.log.is_file(), "processes": processes,
                 "auth_configured": bool(os.environ.get("PEGASUS_TOKEN") or os.environ.get("PEGASUS_COOKIE")),
                 "allow_log_auth": os.environ.get("PEGASUS_ALLOW_LOG_AUTH") == "1",
-                "capabilities": ["launch", "diagnostics", "recent_games", "command_catalog", "read_api", "export", "upload_image", "apply_ui_template", "apply_scene", "ensure_chapter", "apply_story_tree"],
-                "limitations": ["非官方适配层；支持基本 UI、剧情、章节与故事线，不支持发布", "在线操作需要有效会话；历史日志中的会话可能失效"]}
+                "capabilities": ["launch", "diagnostics", "recent_games", "command_catalog", "read_api", "export", "upload_image", "apply_ui_template", "apply_scene", "ensure_chapter", "apply_story_tree", "apply_mall_ui", "apply_goods"],
+                "limitations": ["非官方适配层；支持基本 UI、剧情、章节、故事线与商城编辑，不支持发布", "在线操作需要有效会话；历史日志中的会话可能失效"]}
 
     def launch(self) -> dict:
         if os.name != "nt":
@@ -166,9 +166,12 @@ class Pegasus:
             headers["Cookie"] = cookie
         return headers, {"csrf_token": csrf} if csrf else {}
 
-    def read(self, resource: str, game_id: int, scene_id: int | None = None):
+    def read(self, resource: str, game_id: int, scene_id: int | None = None, catalog_id: int | None = None, ui_id: str | None = None):
         game_id = positive_id(game_id)
-        paths = {"game": f"/game/{game_id}", "scenes": f"/game/{game_id}/chapter/scene",
+        if resource == "mall_ui":
+            from .mall import MallUIService
+            return MallUIService(self).read_ui(game_id, catalog_id, ui_id)
+        paths = {"goods": f"/game/{game_id}/goods", "game": f"/game/{game_id}", "scenes": f"/game/{game_id}/chapter/scene",
                  "variables": f"/game/{game_id}/value", "arrays": f"/game/{game_id}/array",
                  "ui_catalog": f"/command-line/game/{game_id}/custom-ui-catalog",
                  "ui_template": f"/game/{game_id}/config/template"}
@@ -197,9 +200,9 @@ class Pegasus:
             raise BridgeError("后台响应缺少 data；无法确认读取成功")
         return {"source": "live_api", "resource": resource, "game_id": game_id, "response": redact(payload)}
 
-    def export(self, resource: str, game_id: int, output: str, scene_id: int | None = None):
+    def export(self, resource: str, game_id: int, output: str, scene_id: int | None = None, catalog_id: int | None = None, ui_id: str | None = None):
         # Fetch first; a failed request must never produce a success-looking snapshot.
-        value = self.command_catalog(game_id) if resource == "catalog" else self.read(resource, game_id, scene_id)
+        value = self.command_catalog(game_id) if resource == "catalog" else self.read(resource, game_id, scene_id, catalog_id, ui_id)
         path = Path(output).expanduser().resolve()
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
