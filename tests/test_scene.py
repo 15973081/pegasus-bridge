@@ -26,7 +26,7 @@ class SceneTests(unittest.TestCase):
     def handle(self, req):
         self.requests.append(req)
         if req.method == 'PUT':
-            self.remote = json.loads(req.content)['commandList'][1]['content']
+            self.remote = next(c['content'] for c in json.loads(req.content)['commandList'] if c['type']=='INSERT')
             data = {}
         elif req.url.path.endswith('/token'):
             data = {'token': 'private'}
@@ -50,6 +50,12 @@ class SceneTests(unittest.TestCase):
     def test_conflict(self):
         with self.assertRaises(BridgeError): self.apply('0' * 64)
         self.assertFalse(any(r.method == 'PUT' for r in self.requests))
+
+    def test_empty_scene_only_inserts(self):
+        self.old=self.remote=''
+        self.assertTrue(self.apply()['verified'])
+        put=next(req for req in self.requests if req.method=='PUT')
+        self.assertEqual([c['type'] for c in json.loads(put.content)['commandList']],['INSERT'])
 
     def test_concurrent_change(self):
         def handler(req):

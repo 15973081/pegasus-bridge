@@ -22,7 +22,7 @@ def main():
     catalog.add_argument("game_id", type=int)
     for name in ("read", "export"):
         p = commands.add_parser(name)
-        p.add_argument("resource", choices=["game", "scenes", "commands", "variables", "arrays", "ui_catalog", "ui_template"] + (["catalog"] if name == "export" else []))
+        p.add_argument("resource", choices=["game", "scenes", "commands", "variables", "arrays", "ui_catalog", "ui_template", "story_tree"] + (["catalog"] if name == "export" else []))
         p.add_argument("game_id", type=int)
         p.add_argument("--scene-id", type=int)
         if name == "export":
@@ -45,6 +45,19 @@ def main():
     scene.add_argument('script_path')
     scene.add_argument('--expected-sha256', required=True)
     scene.add_argument('--backup-directory', required=True)
+    chapter = commands.add_parser('ensure-chapter')
+    chapter.add_argument('game_id',type=int)
+    chapter.add_argument('chapter_name')
+    chapter.add_argument('scene_name')
+    chapter.add_argument('--backup-directory',required=True)
+    chapter.add_argument('--chapter-id',type=int)
+    chapter.add_argument('--scene-id',type=int)
+    story = commands.add_parser('apply-story-tree')
+    story.add_argument('game_id',type=int)
+    story.add_argument('scene_id',type=int)
+    story.add_argument('--tree-file',required=True)
+    story.add_argument('--expected-sha256',required=True)
+    story.add_argument('--backup-directory',required=True)
     args = parser.parse_args()
     bridge = Pegasus(args.install_dir, args.data_dir)
     try:
@@ -63,6 +76,13 @@ def main():
         elif args.command == 'upload-image':
             from .ui import UIService
             result = UIService(bridge).upload_image(args.game_id, args.image_path, args.alias, args.category_id, args.checkpoint)
+        elif args.command == 'ensure-chapter':
+            from .chapters import ChapterService
+            result = ChapterService(bridge).ensure(args.game_id,args.chapter_name,args.scene_name,args.backup_directory,args.chapter_id,args.scene_id)
+        elif args.command == 'apply-story-tree':
+            from .storytree import StoryTreeService
+            tree=json.loads(Path(args.tree_file).read_text(encoding='utf-8'))
+            result=StoryTreeService(bridge).apply(args.game_id,args.scene_id,tree,args.expected_sha256,args.backup_directory)
         elif args.command == 'apply-scene':
             from .scene import SceneService
             result = SceneService(bridge).apply_scene(args.game_id, args.scene_id, args.script_path, args.expected_sha256, args.backup_directory)

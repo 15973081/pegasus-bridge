@@ -4,6 +4,8 @@ from mcp.server.fastmcp import FastMCP
 from .core import Pegasus
 from .ui import UIService
 from .scene import SceneService
+from .chapters import ChapterService
+from .storytree import StoryTreeService
 
 
 def create_server(bridge: Pegasus | None = None):
@@ -46,12 +48,12 @@ def create_server(bridge: Pegasus | None = None):
         return bridge.command_catalog(game_id)
 
     @app.tool(annotations=readonly)
-    def pegasus_read(resource: Literal["game", "scenes", "commands", "variables", "arrays", "ui_catalog", "ui_template"], game_id: int, scene_id: int | None = None) -> dict:
-        """从后台读取作品/场景/指令/变量；commands 必须提供 scene_id。"""
+    def pegasus_read(resource: Literal["game", "scenes", "commands", "variables", "arrays", "ui_catalog", "ui_template", "story_tree"], game_id: int, scene_id: int | None = None) -> dict:
+        """从后台读取作品/场景/指令/变量/故事线；commands 与 story_tree 必须提供 scene_id。"""
         return bridge.read(resource, game_id, scene_id)
 
     @app.tool(annotations={"destructiveHint": False})
-    def pegasus_export(resource: Literal["game", "scenes", "commands", "variables", "arrays", "ui_catalog", "ui_template", "catalog"], game_id: int, output: str, scene_id: int | None = None) -> dict:
+    def pegasus_export(resource: Literal["game", "scenes", "commands", "variables", "arrays", "ui_catalog", "ui_template", "story_tree", "catalog"], game_id: int, output: str, scene_id: int | None = None) -> dict:
         """导出一个资源到本地新 JSON 文件；已有文件不会覆盖。catalog 可离线导出。"""
         return bridge.export(resource, game_id, output, scene_id)
 
@@ -69,6 +71,16 @@ def create_server(bridge: Pegasus | None = None):
     def pegasus_apply_scene(game_id: int, scene_id: int, script_path: str, expected_sha256: str, backup_directory: str) -> dict:
         """经授权替换一段剧情，自动备份、比对旧源码 UTF-8 SHA256 并读回验证。后台没有原子 CAS，请避免同时保存；本工具不发布作品，不保证编辑器 Lua 兼容性。"""
         return SceneService(bridge).apply_scene(game_id, scene_id, script_path, expected_sha256, backup_directory)
+
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
+    def pegasus_ensure_chapter(game_id: int, chapter_name: str, scene_name: str, backup_directory: str, chapter_id: int | None = None, scene_id: int | None = None) -> dict:
+        """经授权建立章节及一个场景。按名称复用，指定现有 ID 可重命名；不删除剧情。先备份结构、检查并发、读回验证。请求失败先重新读取，避免重复创建。"""
+        return ChapterService(bridge).ensure(game_id,chapter_name,scene_name,backup_directory,chapter_id,scene_id)
+
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
+    def pegasus_apply_story_tree(game_id: int, scene_id: int, tree: dict, expected_sha256: str, backup_directory: str) -> dict:
+        """更新场景原生故事线节点/封面/连线，先校验目标、唯一标识、连线与无环布局，再备份、检查并发及读回。独立于剧情源码；不保证原生节点支持自定义 Lua 精确跳转。哈希规则与 apply_ui_template 相同。"""
+        return StoryTreeService(bridge).apply(game_id,scene_id,tree,expected_sha256,backup_directory)
 
     return app
 

@@ -17,8 +17,12 @@ Windows 天马编辑器（默认 `C:\APP\PegasusEditor`）的非官方基础适�
 | 基本 UI 模板读取、导出 | `read ui_template` / `export ui_template` | `pegasus_read` / `pegasus_export` | 2026-10-26 在线读回实测 |
 | PNG 素材上传 | `upload-image` | `pegasus_upload_image` | 2026-10-26 通过 MCP 上传 13 张适配素材 |
 | 基本 UI 分类保存 | `apply-ui` | `pegasus_apply_ui_template` | 2026-10-26 通过 MCP 更新 playback 并读回一致 |
+| 剧情源码替换 | `apply-scene` | `pegasus_apply_scene` | 空场景首次写入与六章读回实测 |
+| 创建或复用章节与场景 | `ensure-chapter` | `pegasus_ensure_chapter` | 2026-10-27 六章实测 |
+| 原生故事线读取、导出 | `read story_tree` / `export story_tree` | `pegasus_read` / `pegasus_export` | 六个场景在线读回 |
+| 原生故事线节点与连线保存 | `apply-story-tree` | `pegasus_apply_story_tree` | 2026-10-27 六章 45 节点读回，第三章实机显示确认 |
 
-**限制：** 在线操作使用 `TOKEN` Cookie 与 CSRF 查询参数，写入成功业务码必须为 `200000`。会话过期可能返回 `502001`。0.3.0 支持图片上传、基本 UI 保存和带版本校验的剧情替换；不支持发布或 Unity 内部对象控制。`catalog` 是指令分类缓存，不是场景剧情内容。`recent-games` 是历史记录，不是账号全部作品。响应保留后台结构，`scenes` 的 data、UI 分类中的 command 和 `ui_template` 中的 template 可能是 JSON 字符串，需要再次解析。
+**限制：** 在线操作使用 `TOKEN` Cookie 与 CSRF 查询参数，写入成功业务码必须为 `200000`。会话过期可能返回 `502001`。0.4.0 支持图片上传、基本 UI 保存、剧情替换、章节建立及故事线保存；不支持发布或 Unity 内部对象控制。`catalog` 是指令分类缓存，不是场景剧情内容。`recent-games` 是历史记录，不是账号全部作品。响应保留后台结构，`scenes` 的 data、UI 分类中的 command 和 `ui_template` 中的 template 可能是 JSON 字符串，需要再次解析。
 
 ## 使用
 
@@ -156,6 +160,39 @@ $expectedUiHash = (Get-Content '.\exports\playback.sha256' -Raw).Trim()
 
 **保存成功不代表运行验证成功。** 编辑器可能继续使用内存里的旧剧情，写入后应退出作品并重新打开，再进行运行验证。工具不验证 Lua 语法或天马指令兼容性。
 
+## 章节与原生故事线（0.4.0）
+
+```powershell
+.\pegasus.cmd ensure-chapter 123456 '第一章_病房' '病房苏醒' --backup-directory '.\exports\chapter-backups'
+.\pegasus.cmd read story_tree 123456 --scene-id 987654
+.\pegasus.cmd export story_tree 123456 --scene-id 987654 --output '.\exports\story-tree-before.json'
+```
+
+`ensure-chapter` 按名称复用章节和场景；显式传入 `--chapter-id` 与 `--scene-id` 可以重命名已存在的目标。指定场景时必须指定其所属章节。不会删除剧情；写入前备份章节结构、检查并发，写入后读回确认。名称使用中文、字母、数字或下划线，不以数字开头。创建步骤不是事务，网络失败后先读回结构再决定是否重试。
+
+故事线是独立于 Lua 源码和 `playback` 样式的场景数据。仅更新剧情或背景，不会自动生成节点。以下是待提交文件的结构示例，素材 ID 需要替换为作品中真实素材：
+
+```json
+{
+  "gameId": 123456,
+  "sceneId": 987654,
+  "nodes": [
+    {"name": "start", "video_id": "start", "title_text": "病房苏醒", "story_res_id": "$123456789", "next_video": "clue", "title_style": "", "font_name": "", "hide": false},
+    {"name": "clue", "video_id": "clue", "title_text": "检查病历", "story_res_id": "$123456790", "next_video": "", "title_style": "", "font_name": "", "hide": false}
+  ]
+}
+```
+
+从读取结果的 `response.data` 计算 `digest(before)`，方法与 UI 分类哈希一致；不要对修改后的对象或响应外层计算旧哈希。保存目标对象为 `story-tree.json` 后：
+
+```powershell
+.\pegasus.cmd apply-story-tree 123456 987654 --tree-file '.\story-tree.json' --expected-sha256 $expectedTreeHash --backup-directory '.\exports\story-tree-backups'
+```
+
+MCP 对应 `pegasus_ensure_chapter` 和 `pegasus_apply_story_tree`；后者直接接收 `tree` 对象，其他参数与 CLI 对应。故事线限制为 1–200 个节点，校验目标身份、节点名称与 ID 唯一性、素材 ID、连线目标及无环结构。备份包含 `before` 与 `after`，写入前再次检查并发，写入后精确读回；不支持清空故事线。后台没有原子 CAS。
+
+原生故事线的点击、解锁和存档行为由编辑器运行时决定；保存节点不等于将自定义 Lua 分支接入精确跳转或自动同步进度。编辑模式可能只选择节点，不执行剧情跳转。第三章的显示已实测，其他章节已读回核验；不宣称完成所有节点的原生跳转验收。
+
 ## MCP 接入
 
 复制 `mcp-config.example.json` 为本地 `mcp-config.json`，将示例命令替换为实际 Python 绝对路径，再将 `mcpServers.pegasus-editor` 合并进支持该格式的 MCP 客户端配置。本地配置已加入 Git 忽略列表。其他客户端请填写：
@@ -164,7 +201,7 @@ $expectedUiHash = (Get-Content '.\exports\playback.sha256' -Raw).Trim()
 - 参数：`-m`、`pegasus_bridge.server`
 - 传输：stdio
 
-需要在线操作时，在 MCP 客户端的服务器环境变量里配置上述会话。CLI 的 PowerShell 环境不会自动传播给已经运行的桌面客户端。升级后重启或重连 MCP 服务，工具列表应包含 11 个工具。
+需要在线操作时，在 MCP 客户端的服务器环境变量里配置上述会话。CLI 的 PowerShell 环境不会自动传播给已经运行的桌面客户端。升级后重启或重连 MCP 服务，工具列表应包含 13 个工具。
 
 直接启动服务可用 `.\pegasus-mcp.cmd` 或 `uv run pegasus-mcp`；服务等待 MCP 消息，不提供交互式提示符。服务采用 [官方 MCP Python SDK](https://py.sdk.modelcontextprotocol.io/v1/) 的 FastMCP 与 stdio 传输，依赖锁定在 1.x。
 
@@ -187,6 +224,8 @@ uv run python -m unittest discover -s tests -v
 uv run python tests/smoke_mcp.py
 ```
 
-单元测试还覆盖剧情替换的 UTF-16 索引、备份、并发冲突和读回不一致。单元测试覆盖 Windows 进程枚举、脱敏、认证、读取、导出以及 UI 更新的冲突拒绝、备份失败、写后读回、无修改路径、上传凭据隔离和检查点绑定。stdio 集成测试实际启动独立 MCP 子进程，验证初始化、11 个工具发现、写工具的参数与注解、成功调用和无网络的错误调用。测试不修改云端作品。
+单元测试还覆盖剧情替换的 UTF-16 索引、备份、并发冲突和读回不一致。单元测试覆盖 Windows 进程枚举、脱敏、认证、读取、导出以及 UI 更新的冲突拒绝、备份失败、写后读回、无修改路径、上传凭据隔离和检查点绑定。stdio 集成测试实际启动独立 MCP 子进程，验证初始化、13 个工具发现、写工具的参数与注解、成功调用和无网络的错误调用。测试不修改云端作品。
 
 2026-10-26 的独立授权实测通过真实 MCP stdio 会话上传 13 张图片并更新 `playback`，读回确认目标分类一致、其他 UI 分类和剧情脚本未变化、作品仍为草稿。此记录验证接口保存，不代表完成 Unity 内的视觉验收。
+
+2026-10-27：44 项单元测试及 13 工具的真实 MCP stdio 集成检查通过；新增章节复用、目标归属、空场景写入、故事线无环校验、并发冲突和读回失败覆盖。

@@ -64,12 +64,14 @@ class SceneService(UIService):
             token = self.data(api.get(url + '/token'))['token']
             if source_hash(read()) != expected_sha256:
                 raise BridgeError('备份后检测到并发剧情编辑，未写入')
+            commands=[]
+            if before:
+                commands.append({'index': 0, 'length': len(before.encode('utf-16-le')) // 2, 'type': 'DELETE', 'content': None})
+            commands.append({'index': 0, 'length': 0, 'type': 'INSERT', 'content': code})
             self.data(api.put(url, json={
                 'sId': session, 'token': token, 'serialNum': 1, 'errorStatus': 1,
                 'stats': {'source': 3, 'codeNumDelta': 0, 'contentNumDelta': 0},
-                'commandList': [
-                    {'index': 0, 'length': len(before.encode('utf-16-le')) // 2, 'type': 'DELETE', 'content': None},
-                    {'index': 0, 'length': 0, 'type': 'INSERT', 'content': code}]}))
+                'commandList': commands}))
             after = read()
             report = dict(game_id=game_id, scene_id=scene_id, changed=True, verified=after == code,
                           sha256=source_hash(after), backup=str(backup))

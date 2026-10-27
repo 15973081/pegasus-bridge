@@ -76,8 +76,8 @@ class Pegasus:
                 "data_dir": str(self.data), "log_available": self.log.is_file(), "processes": processes,
                 "auth_configured": bool(os.environ.get("PEGASUS_TOKEN") or os.environ.get("PEGASUS_COOKIE")),
                 "allow_log_auth": os.environ.get("PEGASUS_ALLOW_LOG_AUTH") == "1",
-                "capabilities": ["launch", "diagnostics", "recent_games", "command_catalog", "read_api", "export", "upload_image", "apply_ui_template"],
-                "limitations": ["非官方适配层；仅支持基本 UI 配置写入，不支持发布", "在线操作需要有效会话；历史日志中的会话可能失效"]}
+                "capabilities": ["launch", "diagnostics", "recent_games", "command_catalog", "read_api", "export", "upload_image", "apply_ui_template", "apply_scene", "ensure_chapter", "apply_story_tree"],
+                "limitations": ["非官方适配层；支持基本 UI、剧情、章节与故事线，不支持发布", "在线操作需要有效会话；历史日志中的会话可能失效"]}
 
     def launch(self) -> dict:
         if os.name != "nt":
@@ -174,6 +174,8 @@ class Pegasus:
                  "ui_template": f"/game/{game_id}/config/template"}
         if resource == "commands":
             paths["commands"] = f"/command-line/game/{game_id}/scene/{positive_id(scene_id)}/command"
+        if resource == "story_tree":
+            paths["story_tree"] = f"/game/{game_id}/scene/{positive_id(scene_id)}/story-tree"
         if resource not in paths:
             raise BridgeError("不支持的资源类型")
         headers, params = self._auth()
