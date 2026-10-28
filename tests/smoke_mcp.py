@@ -12,7 +12,7 @@ async def main():
             await session.initialize()
             tools = await session.list_tools()
             names = [tool.name for tool in tools.tools]
-            assert len(names) == 24, names
+            assert len(names) == 25, names
             by_name = {tool.name: tool for tool in tools.tools}
             for name in ('pegasus_upload_image', 'pegasus_apply_ui_template', 'pegasus_apply_scene', 'pegasus_ensure_chapter', 'pegasus_apply_story_tree', 'pegasus_apply_mall_ui', 'pegasus_apply_goods'):
                 assert by_name[name].annotations.readOnlyHint is False
@@ -25,6 +25,11 @@ async def main():
                 'game_id': 42, 'catalog_id': 8, 'bindings': {}, 'theme': {},
                 'output_directory': 'unused-mall-design'})
             assert invalid_design.isError
+            assert by_name['pegasus_ensure_checkpoint_variable'].annotations.readOnlyHint is False
+            bad_checkpoint = await session.call_tool('pegasus_ensure_checkpoint_variable', {
+                'game_id': 42, 'name': 'system_reserved', 'expected_sha256': '0'*64,
+                'backup_directory': 'unused-checkpoint'})
+            assert bad_checkpoint.isError
             result = await session.call_tool("pegasus_status", {})
             assert not result.isError, result
             payload = json.loads(result.content[0].text)

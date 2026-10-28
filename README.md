@@ -15,6 +15,7 @@ Windows 天马编辑器（默认 `C:\APP\PegasusEditor`）的非官方基础适�
 | 背包物品及数量 | `inventory` | `pegasus_inventory` | 实际六章 Lua 测试，18 份证据；区分前情与本轮收集 |
 | 本机原生存档目录 | `list-archives` | `pegasus_list_archives` | 真实 MCP 列出 4 个本地测试档 |
 | 原生存档变量快照 | `read-archive` | `pegasus_read_archive` | 真实 MCP 读取 4 档；快照均为空，不等于空背包 |
+| 注册原生存档字段 | `ensure-checkpoint-variable` | `pegasus_ensure_checkpoint_variable` | 普通字符串变量实际创建、读回验证；不写玩家进度 |
 | 历史访问的作品和场景 ID | `recent-games` | `pegasus_recent_games` | 本机日志实测 |
 | 已观测的后台路径 | `routes` | `pegasus_routes` | 本机日志实测 |
 | 脱敏日志 | `logs` | `pegasus_logs` | 本机读取、脱敏测试 |
@@ -35,7 +36,7 @@ Windows 天马编辑器（默认 `C:\APP\PegasusEditor`）的非官方基础适�
 | 商品列表读取、导出 | `read goods` / `export goods` | `pegasus_read` / `pegasus_export` | 在线读取实测 |
 | 已有商品数据编辑 | `apply-goods` | `pegasus_apply_goods` | 模拟接口测试；尚未实际修改线上商品 |
 
-**限制：** 在线操作使用 `TOKEN` Cookie 与 CSRF 查询参数，写入成功业务码必须为 `200000`。会话过期可能返回 `502001`。0.8.0 支持作品状态、主动上报的玩家/背包观察、本地原生存档，以及图片、UI、剧情、章节、故事线、商城编辑与设计生成；不支持发布、原生试玩控制或 Unity 内部对象读写。`catalog` 是指令分类缓存，不是场景剧情内容。`recent-games` 是历史记录，不是账号全部作品。响应保留后台结构，`scenes` 的 data、UI 分类中的 command 和 `ui_template` 中的 template 可能是 JSON 字符串，需要再次解析。
+**限制：** 在线操作使用 `TOKEN` Cookie 与 CSRF 查询参数，写入成功业务码必须为 `200000`。会话过期可能返回 `502001`。0.9.0 支持作品状态、主动上报的玩家/背包观察、本地原生存档，以及图片、UI、剧情、章节、故事线、商城编辑与设计生成；不支持发布、原生试玩控制或 Unity 内部对象读写。`catalog` 是指令分类缓存，不是场景剧情内容。`recent-games` 是历史记录，不是账号全部作品。响应保留后台结构，`scenes` 的 data、UI 分类中的 command 和 `ui_template` 中的 template 可能是 JSON 字符串，需要再次解析。
 
 
 ## 使用
@@ -123,6 +124,22 @@ uv sync --locked
 MCP：`pegasus_list_archives(game_id, mode="Editor", user_id=None)`、`pegasus_read_archive(game_id, slot, mode="Editor", user_id=None)`。`mode` 为 `Editor` 或 `Runtime`；支持本机 v2 Local 槽位 1–50。省略 `user_id` 只读旧目录，标记 `identity_scope=legacy_unbound`；不会从多个用户目录中自动选一个。
 
 存档读取仅返回白名单元数据、场景与记录数量、`script_start_snapshot` / `save_snapshot`。五类快照为普通变量基础值、普通变量增量、永久变量、普通数组、永久数组。`snapshot_state=missing/empty/available` 区分无快照、空快照、有内容。普通变量基础值与购买增量分开返回，不擅自相加后声称是当前值。不会执行存档脚本、跟随其中的路径/URL 或将 Clouds 缓存冒充当前云档。
+
+### 注册调查进度字段（0.9.0）
+
+Lua 的局部变量不会自动进入原生变量快照。需要持久化自定义调查状态时，可注册一个普通字符串变量，然后由作品脚本将有版本号的进度序列化到 `ac.var.<变量名>`。普通变量的后台 `category=2`，字符串的 `valueType=2`；不是永久变量，不产生商城权益。
+
+```powershell
+.\pegasus.cmd read variables 123456
+# expectedVariablesHash = response.data 的 pegasus_bridge.ui.digest
+.\pegasus.cmd ensure-checkpoint-variable 123456 investigation_checkpoint --expected-sha256 $expectedVariablesHash --backup-directory '.\exports\variable-backups'
+```
+
+MCP：`pegasus_ensure_checkpoint_variable(game_id, name, expected_sha256, backup_directory)`。名称为 1–64 位字母数字下划线，以字母开头，禁止 `system_` 前缀。先核对整个变量目录哈希、备份并复查，再创建空字符串定义；同名兼容定义仅复用，不改默认值或任何玩家值。同名不兼容定义拒绝覆盖。后台没有原子 CAS；请求结果不确定时先读回，不重复创建。
+
+注册字段不是存档完成。作品应校验版本、节点、道具数量和选择的一致性，将状态写入变量后调用原生存档 UI，并由玩家选定槽位。当前打开的编辑器可能尚未加载新定义，须重新打开作品。原生客户端在回放末尾应用保存快照，因此脚本还需在读档关闭后重新取值；仅在脚本开头读取可能早于最终恢复。`ac.showUI` 支持具名 `close_cb` 回调，游戏也应处理由系统菜单发起的读档。旧存档没有新增字段时，不能将其当成当前调查进度。
+
+这项工具只注册字段，没有通用游戏状态编解码器，也不保证任意 Lua 局部状态能自动恢复。真实作品中的进度编解码和交互必须另行测试；原生跨运行存读档验收仍待完成。
 
 ### 查看上报的玩家进度与物品
 
@@ -386,7 +403,7 @@ MCP 对应 `pegasus_mall_overview(game_id)` 和 `pegasus_build_mall_ui(game_id, 
 - 参数：`-m`、`pegasus_bridge.server`
 - 传输：stdio
 
-需要在线操作时，在 MCP 客户端的服务器环境变量里配置上述会话。CLI 的 PowerShell 环境不会自动传播给已经运行的桌面客户端。升级后重启或重连 MCP 服务，工具列表应包含 24 个工具。
+需要在线操作时，在 MCP 客户端的服务器环境变量里配置上述会话。CLI 的 PowerShell 环境不会自动传播给已经运行的桌面客户端。升级后重启或重连 MCP 服务，工具列表应包含 25 个工具。
 
 直接启动服务可用 `.\pegasus-mcp.cmd` 或 `uv run pegasus-mcp`；服务等待 MCP 消息，不提供交互式提示符。服务采用 [官方 MCP Python SDK](https://py.sdk.modelcontextprotocol.io/v1/) 的 FastMCP 与 stdio 传输，依赖锁定在 1.x。
 
@@ -409,7 +426,7 @@ uv run python -m unittest discover -s tests -v
 uv run python tests/smoke_mcp.py
 ```
 
-单元测试还覆盖剧情替换的 UTF-16 索引、备份、并发冲突和读回不一致。单元测试覆盖 Windows 进程枚举、脱敏、认证、读取、导出以及 UI 更新的冲突拒绝、备份失败、写后读回、无修改路径、上传凭据隔离和检查点绑定。stdio 集成测试实际启动独立 MCP 子进程，验证初始化、24 个工具发现、写工具的参数与注解、成功调用和无网络的错误调用。测试不修改云端作品。
+单元测试还覆盖剧情替换的 UTF-16 索引、备份、并发冲突和读回不一致。单元测试覆盖 Windows 进程枚举、脱敏、认证、读取、导出以及 UI 更新的冲突拒绝、备份失败、写后读回、无修改路径、上传凭据隔离和检查点绑定。stdio 集成测试实际启动独立 MCP 子进程，验证初始化、25 个工具发现、写工具的参数与注解、成功调用和无网络的错误调用。测试不修改云端作品。
 
 2026-10-26 的独立授权实测通过真实 MCP stdio 会话上传 13 张图片并更新 `playback`，读回确认目标分类一致、其他 UI 分类和剧情脚本未变化、作品仍为草稿。此记录验证接口保存，不代表完成 Unity 内的视觉验收。
 
@@ -422,3 +439,5 @@ uv run python tests/smoke_mcp.py
 2026-10-28 玩家与背包升级：111 项测试，109 项通过、2 项因系统符号链接权限跳过（Windows junction 测试通过）；22 工具 stdio 检查通过。可选 Lua 往返测试在本机安装的 Lupa 中运行，未安装时会跳过。实际六章 Lua 测试产生 223 次有效上报，覆盖 18 份证据、三个结局、前情来源和错误选项恢复。真实 MCP 验证了 4 个本地存档及六章采集代码保存；UI/故事线未变化，作品仍为草稿。原生运行上报验证仍待完成。
 
 2026-10-28 商城设计升级（0.8.0）：121 项测试，119 项通过、2 项符号链接权限跳过；24 工具 stdio 检查通过。CLI 实际生成五页商城 Lua，六种状态的本地渲染无文字溢出。通过真实 MCP 保存首页、三个详情页与剧情锁，五页源码读回一致；基本 UI、六章剧情和商品数据保持不变。目标作品后台无商品，预览样例只用于本地布局检查，未创建商品或执行支付。原生窗口视觉与购买解锁流程尚未验收。
+
+2026-10-28 调查进度升级（0.9.0）：126 项工具测试，124 项通过、2 项符号链接权限跳过；25 工具 stdio 检查通过。真实 MCP 注册普通字符串进度字段，并保存六章调查脚本及第一章 13 节点故事线。作品测试覆盖 10 组道具消耗、回访、版本拒绝、读档回调、延迟分支与观察数据；六章三个结局回归通过，84 种页面状态通过本地布局检查。这些是逻辑与后台保存证据，不等同于原生存读档实机验收。

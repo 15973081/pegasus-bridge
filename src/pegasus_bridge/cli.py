@@ -101,6 +101,11 @@ def main():
     goods.add_argument('--changes-file',required=True)
     goods.add_argument('--expected-sha256',required=True)
     goods.add_argument('--backup-directory',required=True)
+    checkpoint = commands.add_parser('ensure-checkpoint-variable', help='注册或复用原生存档的普通字符串变量')
+    checkpoint.add_argument('game_id', type=int)
+    checkpoint.add_argument('name')
+    checkpoint.add_argument('--expected-sha256', required=True)
+    checkpoint.add_argument('--backup-directory', required=True)
     args = parser.parse_args()
     bridge = Pegasus(args.install_dir, args.data_dir)
     try:
@@ -108,7 +113,10 @@ def main():
             from .server import create_server
             create_server(bridge).run(transport="stdio")
             return
-        if args.command in ('mall-overview', 'build-mall-ui'):
+        if args.command == 'ensure-checkpoint-variable':
+            from .variables import VariableService
+            result = VariableService(bridge).ensure_checkpoint(args.game_id,args.name,args.expected_sha256,args.backup_directory)
+        elif args.command in ('mall-overview', 'build-mall-ui'):
             from .mall_design import MallDesignService
             service = MallDesignService(bridge)
             if args.command == 'mall-overview':

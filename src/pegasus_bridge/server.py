@@ -21,6 +21,12 @@ def create_server(bridge: Pegasus | None = None):
     bridge = bridge or Pegasus()
     readonly = {"readOnlyHint": True, "destructiveHint": False}
 
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
+    def pegasus_ensure_checkpoint_variable(game_id: int, name: str, expected_sha256: str, backup_directory: str) -> dict:
+        """注册或复用普通字符串进度变量，供 Lua ac.var[name] 和原生存档使用。哈希为完整 variables data 的 digest；不修改同名定义或玩家进度。先备份并检查并发，创建后读回。"""
+        from .variables import VariableService
+        return VariableService(bridge).ensure_checkpoint(game_id,name,expected_sha256,backup_directory)
+
     @app.tool(annotations=readonly)
     def pegasus_mall_overview(game_id: int) -> dict:
         """检查商城 UI ID、名称、源码哈希、原生商品读取和模板静态商品线索；返回后台商品数，不是玩家库存。"""
