@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lua 交互预览</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080b0d}
+#stage{position:absolute;transform-origin:top left;overflow:hidden;background:#11191c}
+.node{position:absolute}.text{display:flex;white-space:pre-wrap;font-family:"Microsoft YaHei",sans-serif;line-height:1.35;pointer-events:none}.inner{width:100%}
+button.node{padding:0;cursor:pointer;color:#eee;background:#263638;border:1px solid #829997;font:28px sans-serif}
+button.art{background:none;border:0}button.node img{width:100%;height:100%}button.node:focus-visible{outline:3px solid #f3c76d;outline-offset:3px}
+#bar{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;gap:12px;background:#10191fee;color:#b9d2d4;padding:6px 10px;font:12px sans-serif;z-index:99999}
+#bar span{flex:1}#bar button{color:#fff;background:#263b45;border:1px solid #66858b;padding:5px 12px;cursor:pointer}
+#error{position:fixed;top:12px;left:20%;right:20%;color:#fff;background:#5b2929;padding:14px;z-index:100000;display:none;white-space:pre-wrap}
+</style>
+<main id="stage" aria-label="Lua 预览画面"></main>
+<div id="bar"><span id="status">同源 Lua 近似预览 · 非天马原生运行 · 会话进度不写入天马</span><button id="reload">刷新状态</button><button id="reset">重置预览</button></div>
+<div id="error" role="alert"></div>
+<script>
+let resources={},state=null,busy=false,noticeCount=0;
+const sounds=new Map(), stage=document.getElementById('stage'), error=document.getElementById('error');
+function warn(message){error.textContent=message;error.style.display='block'}
+function resize(){if(!state)return;const w=state.width,h=state.height,s=Math.min(innerWidth/w,(innerHeight-38)/h);Object.assign(stage.style,{width:w+'px',height:h+'px',transform:`scale(${s})`,left:(innerWidth-w*s)/2+'px',top:(innerHeight-38-h*s)/2+'px'})}
+addEventListener('resize',resize);
+function pair(value,fallback){return Array.isArray(value)&&value.length===2?value:fallback}
+function draw(data){
+ state=data;document.title=data.title+' · Lua 近似预览';stage.replaceChildren();resize();
+ const nodes=new Map(),pending=Object.values(data.objects);
+ function append(cfg,chain=new Set()){
+  if(nodes.has(cfg.name))return nodes.get(cfg.name);
+  if(chain.has(cfg.name))throw Error('控件父级循环：'+cfg.name);
+  chain.add(cfg.name);
+  let parent=stage,pw=data.width,ph=data.height;
+  if(cfg.inlayer&&cfg.inlayer!=='window'){
+   const p=data.objects[cfg.inlayer];if(!p)throw Error('缺少父图层：'+cfg.inlayer);
+   parent=append(p,chain);[pw,ph]=pair(p.size,[pw,ph]);
+  }
+  const kind=cfg._kind,[x,y]=pair(cfg.pos,[pw/2,ph/2]),[w,h]=pair(cfg.size,[pw,ph]),[ax,ay]=pair(cfg.anchor,[50,50]);
+  const key=cfg.resId||cfg.normal_resId,src=resources[key];
+  if(key&&!src)throw Error('配置中缺少素材：'+key);
+  const el=document.createElement(kind==='button'?'button':kind==='image'?'img':'div');el.className='node';el.id=cfg.name;
+  Object.assign(el.style,{left:(x-w*ax/100)+'px',top:(ph-y-h*(1-ay/100))+'px',width:w+'px',height:h+'px',zIndex:cfg.index||0,opacity:typeof cfg.opacity==='number'?cfg.opacity/100:1,display:cfg.visible===false?'none':''});
+  if(kind==='layer'){el.style.pointerEvents='none'}else el.style.pointerEvents=kind==='button'?'auto':'none';
+  if(kind==='button'){
+   if(src){el.classList.add('art');const im=document.createElement('img');im.src=src;im.alt='';el.append(im);el.onmouseenter=()=>{im.src=resources[cfg.hover_resId]||src};el.onmouseleave=()=>{im.src=src}}
+   else el.textContent=cfg.text||cfg.name;
+   el.setAttribute('aria-label',data.objects[cfg.name+'_label']?.content||cfg.text||cfg.name);el.onclick=()=>action('click',{name:cfg.name,revision:state.revision});
+  }else if(kind==='image'){el.src=src;el.alt=''}
+  else if(kind==='text'){
+   el.classList.add('text');const style=data.styles[cfg.text_style]||{};
+   Object.assign(el.style,{fontSize:(cfg.font_size||style.font_size||30)+'px',fontWeight:style.bold?700:400,color:style.color||'#fff',textAlign:(cfg.alignment||'').includes('Right')?'right':(cfg.alignment||'').includes('Center')?'center':'left',alignItems:(cfg.alignment||'').includes('Top')?'flex-start':(cfg.alignment||'').includes('Bottom')?'flex-end':'center'});
+   if(cfg.visible!==false)el.style.display='flex';const text=document.createElement('div');text.className='inner';text.textContent=cfg.content||'';el.append(text);
+  }
+  nodes.set(cfg.name,el);parent.append(el);return el;
+ }
+ for(const cfg of pending)append(cfg);
+ const requests=Array.isArray(data.requests)?data.requests:[];
+ if(requests.length>noticeCount)warn('已请求原生界面 '+(requests.at(-1).ui_id||'')+'。本预览不执行原生存读档、商城或支付，请在天马内验证。');
+ noticeCount=requests.length;
+ if(data.fault)warn(data.fault+'\n请重置预览。');
+ document.getElementById('status').textContent='同源 Lua 近似预览 · 非天马原生运行 · 会话进度不写入天马 · 状态 '+data.revision;
+ for(const [name,item]of sounds){if(!data.audio[name]||data.audio[name].resId!==item.key){item.audio.pause();sounds.delete(name)}}
+}
+function playAudio(){
+ for(const [name,cfg]of Object.entries(state.audio)){
+  if(sounds.has(name)||!resources[cfg.resId])continue;
+  const a=new Audio(resources[cfg.resId]);a.loop=!!cfg.loop;a.volume=Math.max(0,Math.min(1,(cfg.targetVolume??25)/100));
+  sounds.set(name,{audio:a,key:cfg.resId});a.play().catch(()=>{sounds.delete(name)});
+ }
+}
+async function readState(){const r=await fetch('state');const d=await r.json();if(!r.ok)throw Error(d.error);draw(d)}
+async function action(endpoint,payload){
+ if(busy)return;busy=true;error.style.display='none';
+ try{const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){await readState();throw Error(d.error)}if(endpoint==='reset'){for(const item of sounds.values())item.audio.pause();sounds.clear();noticeCount=0}draw(d);playAudio()}
+ catch(e){warn(e.message)}finally{busy=false}
+}
+document.getElementById('reload').onclick=()=>readState().catch(e=>warn(e.message));
+document.getElementById('reset').onclick=()=>{if(state&&confirm('重置本地预览的全部进度？不会影响天马作品或存档。'))action('reset',{revision:state.revision})};
+(async()=>{resources=await(await fetch('resources.json')).json();await readState()})().catch(e=>warn(e.message));
+</script></html>

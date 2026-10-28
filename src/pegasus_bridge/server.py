@@ -21,6 +21,34 @@ def create_server(bridge: Pegasus | None = None):
     bridge = bridge or Pegasus()
     readonly = {"readOnlyHint": True, "destructiveHint": False}
 
+    from .preview import PreviewService
+    preview = PreviewService()
+
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
+    def pegasus_preview_start(manifest_path: str) -> dict:
+        """启动本机 Lua 近似预览，返回 URL/session_id/revision。配置 version=1，script 为配置目录内 Lua 相对路径，assets 为素材ID到相对路径映射，variables 为初值。需 preview 可选依赖；独立本地进度，不运行 Unity，不写天马存档；两小时闲置自动停止，MCP 宿主断开清理子进程也可能结束预览。"""
+        return preview.start(manifest_path)
+
+    @app.tool(annotations={**readonly, "openWorldHint": False})
+    def pegasus_preview_state(session_id: str) -> dict:
+        """读取本地预览控件、变量、音频请求、原生界面请求及 revision。不是天马玩家状态。"""
+        return preview.state(session_id)
+
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
+    def pegasus_preview_click(session_id: str, name: str, expected_revision: int) -> dict:
+        """按控件 name 执行本地 Lua 点击；expected_revision 必须匹配最近 state，拒绝过期点击。不操作鼠标键盘或原生天马。"""
+        return preview.click(session_id, name, expected_revision)
+
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    def pegasus_preview_reset(session_id: str, expected_revision: int) -> dict:
+        """清空指定预览会话进度，用启动时冻结的脚本和初始变量重启；不影响天马存档。"""
+        return preview.reset(session_id, expected_revision)
+
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
+    def pegasus_preview_stop(session_id: str) -> dict:
+        """停止指定本地预览服务并丢弃该会话进度。关闭浏览器标签页本身不会停止服务。"""
+        return preview.stop(session_id)
+
     @app.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
     def pegasus_ensure_checkpoint_variable(game_id: int, name: str, expected_sha256: str, backup_directory: str) -> dict:
         """注册或复用普通字符串进度变量，供 Lua ac.var[name] 和原生存档使用。哈希为完整 variables data 的 digest；不修改同名定义或玩家进度。先备份并检查并发，创建后读回。"""

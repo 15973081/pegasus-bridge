@@ -16,6 +16,7 @@ Windows 天马编辑器（默认 `C:\APP\PegasusEditor`）的非官方基础适�
 | 本机原生存档目录 | `list-archives` | `pegasus_list_archives` | 真实 MCP 列出 4 个本地测试档 |
 | 原生存档变量快照 | `read-archive` | `pegasus_read_archive` | 真实 MCP 读取 4 档；快照均为空，不等于空背包 |
 | 注册原生存档字段 | `ensure-checkpoint-variable` | `pegasus_ensure_checkpoint_variable` | 普通字符串变量实际创建、读回验证；不写玩家进度 |
+| 同源 Lua 浏览器预览 | `preview-start/state/click/reset/stop` | `pegasus_preview_start/state/click/reset/stop` | 实际 MCP/CLI 跨进程会话、浏览器点击及第一章调查流程通过；非 Unity 原生试玩 |
 | 历史访问的作品和场景 ID | `recent-games` | `pegasus_recent_games` | 本机日志实测 |
 | 已观测的后台路径 | `routes` | `pegasus_routes` | 本机日志实测 |
 | 脱敏日志 | `logs` | `pegasus_logs` | 本机读取、脱敏测试 |
@@ -36,7 +37,7 @@ Windows 天马编辑器（默认 `C:\APP\PegasusEditor`）的非官方基础适�
 | 商品列表读取、导出 | `read goods` / `export goods` | `pegasus_read` / `pegasus_export` | 在线读取实测 |
 | 已有商品数据编辑 | `apply-goods` | `pegasus_apply_goods` | 模拟接口测试；尚未实际修改线上商品 |
 
-**限制：** 在线操作使用 `TOKEN` Cookie 与 CSRF 查询参数，写入成功业务码必须为 `200000`。会话过期可能返回 `502001`。0.9.0 支持作品状态、主动上报的玩家/背包观察、本地原生存档，以及图片、UI、剧情、章节、故事线、商城编辑与设计生成；不支持发布、原生试玩控制或 Unity 内部对象读写。`catalog` 是指令分类缓存，不是场景剧情内容。`recent-games` 是历史记录，不是账号全部作品。响应保留后台结构，`scenes` 的 data、UI 分类中的 command 和 `ui_template` 中的 template 可能是 JSON 字符串，需要再次解析。
+**限制：** 在线操作使用 `TOKEN` Cookie 与 CSRF 查询参数，写入成功业务码必须为 `200000`。会话过期可能返回 `502001`。0.10.0 支持作品状态、主动上报的玩家/背包观察、本地原生存档，以及图片、UI、剧情、章节、故事线、商城编辑与设计生成，并提供独立 Lua 近似预览；不支持发布、原生试玩控制或 Unity 内部对象读写。`catalog` 是指令分类缓存，不是场景剧情内容。`recent-games` 是历史记录，不是账号全部作品。响应保留后台结构，`scenes` 的 data、UI 分类中的 command 和 `ui_template` 中的 template 可能是 JSON 字符串，需要再次解析。
 
 
 ## 使用
@@ -59,6 +60,17 @@ uv sync --locked
 所有成功结果输出 JSON 到 stdout，错误输出 JSON 到 stderr 并返回退出码 1。导出文件不会覆盖；请使用新文件名。
 
 需要先安装 Python 3.12+ 和 uv。示例作品 ID `123456`、场景 ID `987654` 请替换为自己的实际 ID，可通过 `recent-games` 查询历史访问记录。也可使用 `uv run pegasus ...`；全局安装可用 `uv tool install .`。无须管理员权限。
+
+## 同源 Lua 浏览器预览
+
+```powershell
+uv sync --locked --extra preview --inexact
+.\pegasus.cmd preview-start examples/preview/preview.json
+```
+
+打开返回的 `url`，或使用 `preview-state/click/reset/stop` 操作返回的 `session_id`。MCP 同时提供五个 `pegasus_preview_*` 工具；点击和重置需要最新 `expected_revision`。此功能不需要天马登录，不改作品或玩家存档。已有 MCP 客户端可能需要重新连接以刷新工具列表。
+
+通过配置文件提供脚本、素材与初始变量，启动时冻结为独立会话；只监听本机、闲置两小时退出。支持的 Lua/控件范围、配置样例及限制详见 [预览文档](docs/preview.md)。原生存档、交易、动画及 Unity 渲染不由此预览代替。
 
 ## 在线操作的认证配置
 
@@ -426,7 +438,7 @@ uv run python -m unittest discover -s tests -v
 uv run python tests/smoke_mcp.py
 ```
 
-单元测试还覆盖剧情替换的 UTF-16 索引、备份、并发冲突和读回不一致。单元测试覆盖 Windows 进程枚举、脱敏、认证、读取、导出以及 UI 更新的冲突拒绝、备份失败、写后读回、无修改路径、上传凭据隔离和检查点绑定。stdio 集成测试实际启动独立 MCP 子进程，验证初始化、25 个工具发现、写工具的参数与注解、成功调用和无网络的错误调用。测试不修改云端作品。
+单元测试还覆盖剧情替换的 UTF-16 索引、备份、并发冲突和读回不一致。单元测试覆盖 Windows 进程枚举、脱敏、认证、读取、导出以及 UI 更新的冲突拒绝、备份失败、写后读回、无修改路径、上传凭据隔离和检查点绑定。stdio 集成测试实际启动独立 MCP 子进程，验证初始化、30 个工具发现、写工具的参数与注解、成功调用和无网络的错误调用。测试不修改云端作品。
 
 2026-10-26 的独立授权实测通过真实 MCP stdio 会话上传 13 张图片并更新 `playback`，读回确认目标分类一致、其他 UI 分类和剧情脚本未变化、作品仍为草稿。此记录验证接口保存，不代表完成 Unity 内的视觉验收。
 
@@ -441,3 +453,5 @@ uv run python tests/smoke_mcp.py
 2026-10-28 商城设计升级（0.8.0）：121 项测试，119 项通过、2 项符号链接权限跳过；24 工具 stdio 检查通过。CLI 实际生成五页商城 Lua，六种状态的本地渲染无文字溢出。通过真实 MCP 保存首页、三个详情页与剧情锁，五页源码读回一致；基本 UI、六章剧情和商品数据保持不变。目标作品后台无商品，预览样例只用于本地布局检查，未创建商品或执行支付。原生窗口视觉与购买解锁流程尚未验收。
 
 2026-10-28 调查进度升级（0.9.0）：126 项工具测试，124 项通过、2 项符号链接权限跳过；25 工具 stdio 检查通过。真实 MCP 注册普通字符串进度字段，并保存六章调查脚本及第一章 13 节点故事线。作品测试覆盖 10 组道具消耗、回访、版本拒绝、读档回调、延迟分支与观察数据；六章三个结局回归通过，84 种页面状态通过本地布局检查。这些是逻辑与后台保存证据，不等同于原生存读档实机验收。
+
+2026-10-28 Lua 预览封装（0.10.0）：139 项工具测试，137 项通过、2 项符号链接权限跳过；30 工具 stdio 检查通过。实际 MCP 启动独立进程，另一 CLI 进程点击，再由 MCP 读回、重置和停止；同时验证 CLI 启动命令退出后仍可连接、过期点击、路径限制、跨站拒绝、循环预算和不支持接口报错。MCP 宿主的子进程树清理可能终止会话，详见预览文档。《午夜禁区》第一章的浏览器点击、20 步调查操作、道具消耗和重置在新预览器通过，截图人工检查。未修改云端作品，也不将该结果视为 Unity 原生验收。

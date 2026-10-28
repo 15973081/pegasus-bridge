@@ -14,6 +14,15 @@ def main():
     parser.add_argument("--install-dir")
     parser.add_argument("--data-dir")
     commands = parser.add_subparsers(dest="command", required=True)
+    preview = commands.add_parser('preview-start', help='启动本地同源 Lua 近似预览，不运行 Unity')
+    preview.add_argument('manifest_path')
+    for name in ('preview-state', 'preview-click', 'preview-reset', 'preview-stop'):
+        item = commands.add_parser(name, help='操作本地 Lua 预览会话，不写天马存档')
+        item.add_argument('session_id')
+        if name == 'preview-click':
+            item.add_argument('name')
+        if name in ('preview-click', 'preview-reset'):
+            item.add_argument('--expected-revision', type=int, required=True)
     for name in ("status", "launch", "recent-games", "routes", "mcp"):
         commands.add_parser(name)
     opening = commands.add_parser('open-game', help='通过原生协议打开作品，不操作鼠标键盘')
@@ -113,7 +122,18 @@ def main():
             from .server import create_server
             create_server(bridge).run(transport="stdio")
             return
-        if args.command == 'ensure-checkpoint-variable':
+        if args.command.startswith('preview-'):
+            from .preview import PreviewService
+            service = PreviewService()
+            if args.command == 'preview-start':
+                result = service.start(args.manifest_path)
+            elif args.command == 'preview-click':
+                result = service.click(args.session_id, args.name, args.expected_revision)
+            elif args.command == 'preview-reset':
+                result = service.reset(args.session_id, args.expected_revision)
+            else:
+                result = getattr(service, args.command.removeprefix('preview-'))(args.session_id)
+        elif args.command == 'ensure-checkpoint-variable':
             from .variables import VariableService
             result = VariableService(bridge).ensure_checkpoint(args.game_id,args.name,args.expected_sha256,args.backup_directory)
         elif args.command in ('mall-overview', 'build-mall-ui'):

@@ -12,8 +12,13 @@ async def main():
             await session.initialize()
             tools = await session.list_tools()
             names = [tool.name for tool in tools.tools]
-            assert len(names) == 25, names
+            assert len(names) == 30, names
             by_name = {tool.name: tool for tool in tools.tools}
+            assert by_name['pegasus_preview_state'].annotations.readOnlyHint is True
+            assert by_name['pegasus_preview_reset'].annotations.destructiveHint is True
+            for name in ('pegasus_preview_state', 'pegasus_preview_stop'):
+                invalid = await session.call_tool(name, {'session_id': '../invalid'})
+                assert invalid.isError
             for name in ('pegasus_upload_image', 'pegasus_apply_ui_template', 'pegasus_apply_scene', 'pegasus_ensure_chapter', 'pegasus_apply_story_tree', 'pegasus_apply_mall_ui', 'pegasus_apply_goods'):
                 assert by_name[name].annotations.readOnlyHint is False
                 assert 'game_id' in by_name[name].inputSchema['required']

@@ -1,6 +1,6 @@
 [project]
 name = "pegasus-bridge"
-version = "0.9.0"
+version = "0.10.0"
 description = "Windows PegasusEditor CLI and MCP adapter for UI, scenes, chapters, story maps and mall editing"
 readme = "README.md"
 authors = [
@@ -17,6 +17,9 @@ dependencies = [
 pegasus-bridge = "pegasus_bridge:main"
 pegasus = "pegasus_bridge:main"
 pegasus-mcp = "pegasus_bridge.server:main"
+
+[project.optional-dependencies]
+preview = ["lupa>=2.6,<3"]
 
 [build-system]
 requires = ["uv_build>=0.11.19,<0.12.0"]

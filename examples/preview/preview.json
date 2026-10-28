@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "title": "Lua 预览示例：病房门锁",
+  "script": "scene.lua",
+  "width": 1280,
+  "height": 720,
+  "variables": {"has_key": false},
+  "assets": {}
+}
