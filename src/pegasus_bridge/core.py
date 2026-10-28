@@ -76,7 +76,7 @@ class Pegasus:
                 "data_dir": str(self.data), "log_available": self.log.is_file(), "processes": processes,
                 "auth_configured": bool(os.environ.get("PEGASUS_TOKEN") or os.environ.get("PEGASUS_COOKIE")),
                 "allow_log_auth": os.environ.get("PEGASUS_ALLOW_LOG_AUTH") == "1",
-                "capabilities": ["launch", "open_game", "editor_state", "game_state", "diagnostics", "recent_games", "command_catalog", "read_api", "export", "upload_image", "apply_ui_template", "apply_scene", "ensure_chapter", "apply_story_tree", "apply_mall_ui", "apply_goods"],
+                "capabilities": ["launch", "open_game", "editor_state", "game_state", "player_state", "inventory", "list_archives", "read_archive", "diagnostics", "recent_games", "command_catalog", "read_api", "export", "upload_image", "apply_ui_template", "apply_scene", "ensure_chapter", "apply_story_tree", "apply_mall_ui", "apply_goods"],
                 "limitations": ["非官方适配层；支持基本 UI、剧情、章节、故事线与商城编辑，不支持发布", "在线操作需要有效会话；历史日志中的会话可能失效"]}
 
     def launch(self) -> dict:

@@ -10,7 +10,7 @@ def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
         sys.stderr.reconfigure(encoding="utf-8")
-    parser = argparse.ArgumentParser(description="PegasusEditor CLI：本地诊断、读取与带备份的基本 UI 更新")
+    parser = argparse.ArgumentParser(description="PegasusEditor CLI：作品编辑、玩家/背包观察、原生存档与诊断")
     parser.add_argument("--install-dir")
     parser.add_argument("--data-dir")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -25,6 +25,17 @@ def main():
     state.add_argument('game_id', type=int)
     state.add_argument('--scene-id', type=int)
     state.add_argument('--include-ui', action='store_true')
+    for name in ('player-state', 'inventory'):
+        player = commands.add_parser(name, help='读取作品主动上报的玩家状态或背包，保留新鲜度')
+        player.add_argument('game_id', type=int)
+        player.add_argument('--max-age-seconds', type=int, default=30)
+    for name in ('list-archives', 'read-archive'):
+        archive = commands.add_parser(name, help='读取本机原生存档，非当前实时状态')
+        archive.add_argument('game_id', type=int)
+        if name == 'read-archive':
+            archive.add_argument('slot', type=int)
+        archive.add_argument('--mode', choices=['Editor', 'Runtime'], default='Editor')
+        archive.add_argument('--user-id', type=int)
     logs = commands.add_parser("logs")
     logs.add_argument("--lines", type=int, default=60)
     catalog = commands.add_parser("catalog")
@@ -89,7 +100,18 @@ def main():
             from .server import create_server
             create_server(bridge).run(transport="stdio")
             return
-        if args.command in ('open-game', 'editor-state', 'game-state'):
+        if args.command in ('player-state', 'inventory'):
+            from .player import PlayerService
+            service = PlayerService(bridge)
+            result = getattr(service, args.command.replace('-', '_'))(args.game_id, args.max_age_seconds)
+        elif args.command in ('list-archives', 'read-archive'):
+            from .archives import ArchiveService
+            service = ArchiveService(bridge)
+            if args.command == 'list-archives':
+                result = service.list_archives(args.game_id, args.mode, args.user_id)
+            else:
+                result = service.read_archive(args.game_id, args.slot, args.mode, args.user_id)
+        elif args.command in ('open-game', 'editor-state', 'game-state'):
             from .editor import EditorService
             service = EditorService(bridge)
             if args.command == 'open-game':

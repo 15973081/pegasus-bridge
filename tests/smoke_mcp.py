@@ -12,7 +12,7 @@ async def main():
             await session.initialize()
             tools = await session.list_tools()
             names = [tool.name for tool in tools.tools]
-            assert len(names) == 18, names
+            assert len(names) == 22, names
             by_name = {tool.name: tool for tool in tools.tools}
             for name in ('pegasus_upload_image', 'pegasus_apply_ui_template', 'pegasus_apply_scene', 'pegasus_ensure_chapter', 'pegasus_apply_story_tree', 'pegasus_apply_mall_ui', 'pegasus_apply_goods'):
                 assert by_name[name].annotations.readOnlyHint is False
@@ -27,6 +27,10 @@ async def main():
             editor_payload = json.loads(editor.content[0].text)
             assert editor_payload['current_game_id'] is None
             assert editor_payload['observation']['events'] == []
+            for name in ('pegasus_player_state', 'pegasus_inventory', 'pegasus_list_archives'):
+                assert by_name[name].annotations.readOnlyHint is True
+                invalid = await session.call_tool(name, {'game_id': -1})
+                assert invalid.isError
             bad_open = await session.call_tool('pegasus_open_game', {'game_id': -1})
             assert bad_open.isError
             bad = await session.call_tool("pegasus_read", {"resource": "commands", "game_id": 42})

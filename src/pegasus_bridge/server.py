@@ -8,6 +8,7 @@ from .chapters import ChapterService
 from .storytree import StoryTreeService
 from .mall import MallUIService, GoodsService
 from .editor import EditorService
+from .player import PlayerService
 
 
 def create_server(bridge: Pegasus | None = None):
@@ -15,9 +16,31 @@ def create_server(bridge: Pegasus | None = None):
     # Do not let transport diagnostics expose authenticated query strings.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
-    app = FastMCP("pegasus-editor", instructions="PegasusEditor 适配层。支持读取、PNG 素材上传和带备份的 UI、剧情、章节、故事线、商城编辑；需用户授权及有效登录，不支持发布。recent_games 是历史日志。")
+    app = FastMCP("pegasus-editor", instructions="PegasusEditor 适配层。支持配置、原生本地存档、显式上报的玩家与背包状态读取，以及带备份的 UI、剧情、章节、故事线、商城编辑。在线操作需授权及有效登录，不支持发布。recent_games 是历史日志；player_state/inventory 必须检查 status/fresh，非实时内存查询，无上报不能当空背包。")
     bridge = bridge or Pegasus()
     readonly = {"readOnlyHint": True, "destructiveHint": False}
+
+    @app.tool(annotations=readonly)
+    def pegasus_player_state(game_id: int, max_age_seconds: int = 30) -> dict:
+        """读取已接入 runtime_observer.lua 的作品最近上报的节点、章节、进度标记与物品。非实时内存查询；返回时间、新鲜度及身份未绑定说明。无上报返回 unavailable，不猜测玩家状态。"""
+        return PlayerService(bridge).player_state(game_id, max_age_seconds)
+
+    @app.tool(annotations=readonly)
+    def pegasus_inventory(game_id: int, max_age_seconds: int = 30) -> dict:
+        """读取作品上报的背包物品 ID、名称、数量、类别与来源，附新鲜度。无数据 items=null，不是空背包；已购商品不是背包余量。不修改物品。"""
+        return PlayerService(bridge).inventory(game_id, max_age_seconds)
+
+    @app.tool(annotations=readonly)
+    def pegasus_list_archives(game_id: int, mode: Literal['Editor', 'Runtime'] = 'Editor', user_id: int | None = None) -> dict:
+        """列出本机目标作品 Local 存档；Editor 为编辑器测试档，Runtime 为运行端本地档。user_id 显式选择身份目录，省略不自动选择他人。不读取云端缓存充当当前云档。"""
+        from .archives import ArchiveService
+        return ArchiveService(bridge).list_archives(game_id, mode, user_id)
+
+    @app.tool(annotations=readonly)
+    def pegasus_read_archive(game_id: int, slot: int, mode: Literal['Editor', 'Runtime'] = 'Editor', user_id: int | None = None) -> dict:
+        """只读指定本地存档的场景、变量和数组快照；不是当前玩家实时值，不执行存档脚本。只返回白名单字段并校验作品/身份及路径。"""
+        from .archives import ArchiveService
+        return ArchiveService(bridge).read_archive(game_id, slot, mode, user_id)
 
     @app.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
     def pegasus_open_game(game_id: int, wait_seconds: int = 3) -> dict:
