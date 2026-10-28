@@ -8,6 +8,9 @@ Windows 天马编辑器（默认 `C:\APP\PegasusEditor`）的非官方基础适�
 |---|---|---|---|
 | 安装、构建信息、进程诊断 | `status` | `pegasus_status` | 本机实测 |
 | 启动编辑器 | `launch` | `pegasus_launch` | 本机实测启动 |
+| 无鼠标键盘打开作品 | `open-game` | `pegasus_open_game` | 原生启动器实测转发；作品加载就绪尚未确认 |
+| 编辑器进程与增量加载事件 | `editor-state` | `pegasus_editor_state` | 本机进程、管道探测；游标隔离与脱敏测试 |
+| 已保存作品状态汇总 | `game-state` | `pegasus_game_state` | 2026-10-28 真实 MCP 读回 9 类资源 |
 | 历史访问的作品和场景 ID | `recent-games` | `pegasus_recent_games` | 本机日志实测 |
 | 已观测的后台路径 | `routes` | `pegasus_routes` | 本机日志实测 |
 | 脱敏日志 | `logs` | `pegasus_logs` | 本机读取、脱敏测试 |
@@ -26,7 +29,7 @@ Windows 天马编辑器（默认 `C:\APP\PegasusEditor`）的非官方基础适�
 | 商品列表读取、导出 | `read goods` / `export goods` | `pegasus_read` / `pegasus_export` | 在线读取实测 |
 | 已有商品数据编辑 | `apply-goods` | `pegasus_apply_goods` | 模拟接口测试；尚未实际修改线上商品 |
 
-**限制：** 在线操作使用 `TOKEN` Cookie 与 CSRF 查询参数，写入成功业务码必须为 `200000`。会话过期可能返回 `502001`。0.5.0 支持图片上传、基本 UI 保存、剧情替换、章节建立、故事线保存、商城 UI 和已有商品编辑；不支持发布或 Unity 内部对象控制。`catalog` 是指令分类缓存，不是场景剧情内容。`recent-games` 是历史记录，不是账号全部作品。响应保留后台结构，`scenes` 的 data、UI 分类中的 command 和 `ui_template` 中的 template 可能是 JSON 字符串，需要再次解析。
+**限制：** 在线操作使用 `TOKEN` Cookie 与 CSRF 查询参数，写入成功业务码必须为 `200000`。会话过期可能返回 `502001`。0.6.0 支持原生作品打开请求、状态汇总、图片上传、基本 UI 保存、剧情替换、章节建立、故事线保存、商城 UI 和已有商品编辑；不支持发布、原生试玩控制或 Unity 内部对象读写。`catalog` 是指令分类缓存，不是场景剧情内容。`recent-games` 是历史记录，不是账号全部作品。响应保留后台结构，`scenes` 的 data、UI 分类中的 command 和 `ui_template` 中的 template 可能是 JSON 字符串，需要再次解析。
 
 
 ## 使用
@@ -60,6 +63,37 @@ uv sync --locked
 - `PEGASUS_CSRF_TOKEN`：可选的 CSRF 值。
 - `PEGASUS_ALLOW_LOG_AUTH=1`：没有显式 token/cookie 时，从本地请求日志中最新的 `csrf_token` 还原 TOKEN Cookie；不使用 Unity 的 `headerToken`。库和公开示例默认关闭，需要使用自己的本机会话时再启用，日志会话仍可能过期。
 - `PEGASUS_INSTALL_DIR` / `PEGASUS_DATA_DIR`：覆盖安装目录与用户数据目录。
+
+## 不操作桌面的作品工作流
+
+配置上述认证后，CLI / MCP 直接操作接口，不需要鼠标、键盘、截图或坐标：
+
+```powershell
+# 发送原生作品打开请求（会启动或唤起天马窗口）
+.\pegasus.cmd open-game 123456 --wait-seconds 5
+# 建立原生日志观察起点，之后只读取新增事件
+.\pegasus.cmd editor-state > editor-state.json
+.\pegasus.cmd editor-state --since-file editor-state.json
+# 读取已保存数据；指定场景可同时读取剧情与故事线
+.\pegasus.cmd game-state 123456 --scene-id 987654 --include-ui
+```
+
+对应 MCP：`pegasus_open_game(game_id, wait_seconds)`、`pegasus_editor_state(since)`、`pegasus_game_state(game_id, scene_id, include_ui)`。`since` 传入上次 `editor-state` 的 `observation.cursor`，或 `open-game` 的 `cursor`。CLI 的 `--since-file` 接受这两类完整 JSON 输出。下一次轮询应使用最新游标；日志被替换/截断时返回 `continuity=reset`，不回放旧成功事件。
+
+`open-game` 先验证后台读取权限，再从本机 PlayerPrefs 读取原生服务使用的 `tianmaSdkUid`，构造固定的 `pegasus-editor://open?gameId=...&uid=...` 参数，交给已安装启动器处理单实例转发。UID 不出现在返回值中；不将另一种 `sdkUid` 或作者 ID 当作替代。首次使用仍需完成原生登录。它打开的是**编辑中的作品，不是运行试玩**。
+
+返回值分层解释：
+
+- `request_sent=true`：启动器已被调用；非零退出码会报错。
+- `delivery=forwarded_to_editor` / `editor_started`：本次观察到启动器转发/启动日志；尚不是加载完成。没有日志时为 `unconfirmed`。
+- `progress=metadata_loaded`：新日志表明作品元数据加载成功；仍不代表资源、编辑窗口和 Lua 已就绪。无新事件时为 `sent_unconfirmed`。
+- `editor_ready`、`current_game_id`、`gameplay_running`：没有可靠实时查询协议，保持 `null`。不从旧日志或缓存猜测当前状态。
+
+天马原生代码在已有作品时可能显示“当前可能有未完成编辑，是否跳转”。工具不绕过这个确认、不结束进程、不丢弃编辑；因此目前不能保证所有情况下全程无人值守切换作品。并行原生打开请求可能共用日志，请串行调用；日志事件是观察证据，没有原生请求 ID，也不是严格的请求回执。
+
+`game-state` 返回 `source=persisted_backend`，每个资源包含 `data`、`sha256`、`read_at`，并单独列出 `errors`；任一读取失败时 `complete=false`。逐项读取非原子快照。变量和数组是**编辑定义**，不包含玩家实时值、存档进度或未保存编辑。整体资源哈希用于比对快照；现有写接口要求的单个 UI 分类、商品对象或 Lua 源码哈希仍按对应文档计算。
+
+编辑继续使用 `apply-scene`、`ensure-chapter`、`apply-story-tree`、`apply-ui`、`apply-mall-ui`、`apply-goods`，这些功能本来就通过接口保存并读回验证。保存后台数据不保证正在打开的编辑器自动刷新，应避免两端同时保存。
 
 配置有效会话后：
 
@@ -241,7 +275,7 @@ MCP 对应 `pegasus_apply_goods(game_id, goods_id, changes, expected_sha256, bac
 - 参数：`-m`、`pegasus_bridge.server`
 - 传输：stdio
 
-需要在线操作时，在 MCP 客户端的服务器环境变量里配置上述会话。CLI 的 PowerShell 环境不会自动传播给已经运行的桌面客户端。升级后重启或重连 MCP 服务，工具列表应包含 15 个工具。
+需要在线操作时，在 MCP 客户端的服务器环境变量里配置上述会话。CLI 的 PowerShell 环境不会自动传播给已经运行的桌面客户端。升级后重启或重连 MCP 服务，工具列表应包含 18 个工具。
 
 直接启动服务可用 `.\pegasus-mcp.cmd` 或 `uv run pegasus-mcp`；服务等待 MCP 消息，不提供交互式提示符。服务采用 [官方 MCP Python SDK](https://py.sdk.modelcontextprotocol.io/v1/) 的 FastMCP 与 stdio 传输，依赖锁定在 1.x。
 
@@ -252,7 +286,7 @@ MCP 对应 `pegasus_apply_goods(game_id, goods_id, changes, expected_sha256, bac
 - 安装为 Unity / IL2CPP 发布包，含 `GameAssembly.dll`，不是源代码仓库。
 - `launcher.json` 指向 `Release_Windows_Tianma.exe`。
 - 内置构建信息为 2026-09-29；热更新缓存另有 2026-10-19 版本，因此此构建日期不代表全部热更新内容。
-- 注册表存在 `pegasus-editor` 协议，指向 `PegasusEditorLauncher.exe`；本适配层仅调用普通启动，不构造未经验证的作品深链参数。
+- 注册表存在 `pegasus-editor` 协议，指向 `PegasusEditorLauncher.exe`。0.6.0 增加固定参数的作品打开请求；2026-10-28 启动器日志实测 `source=scheme` 且已转发至运行中的编辑器，未取得作品加载就绪回执。
 - 数据目录为 `%USERPROFILE%\AppData\LocalLow\com_NetEase\Pegasus`。
 - 历史日志中观测到 `/game/{id}`、`/game/{id}/chapter/scene`、`/command-line/game/{id}/scene/{scene_id}/command` 等路径。它们是非公开、可能变化的接口。
 - 未发现已验证的原生 CLI 或 MCP 服务入口；该结论不是对所有二进制内部能力的穷尽证明。
@@ -264,10 +298,12 @@ uv run python -m unittest discover -s tests -v
 uv run python tests/smoke_mcp.py
 ```
 
-单元测试还覆盖剧情替换的 UTF-16 索引、备份、并发冲突和读回不一致。单元测试覆盖 Windows 进程枚举、脱敏、认证、读取、导出以及 UI 更新的冲突拒绝、备份失败、写后读回、无修改路径、上传凭据隔离和检查点绑定。stdio 集成测试实际启动独立 MCP 子进程，验证初始化、15 个工具发现、写工具的参数与注解、成功调用和无网络的错误调用。测试不修改云端作品。
+单元测试还覆盖剧情替换的 UTF-16 索引、备份、并发冲突和读回不一致。单元测试覆盖 Windows 进程枚举、脱敏、认证、读取、导出以及 UI 更新的冲突拒绝、备份失败、写后读回、无修改路径、上传凭据隔离和检查点绑定。stdio 集成测试实际启动独立 MCP 子进程，验证初始化、18 个工具发现、写工具的参数与注解、成功调用和无网络的错误调用。测试不修改云端作品。
 
 2026-10-26 的独立授权实测通过真实 MCP stdio 会话上传 13 张图片并更新 `playback`，读回确认目标分类一致、其他 UI 分类和剧情脚本未变化、作品仍为草稿。此记录验证接口保存，不代表完成 Unity 内的视觉验收。
 
 2026-10-27：44 项单元测试及 13 工具的真实 MCP stdio 集成检查通过；新增章节复用、目标归属、空场景写入、故事线无环校验、并发冲突和读回失败覆盖。
 
 2026-10-27 商城升级：66 项单元测试和 15 工具 MCP stdio 检查通过。真实 MCP 会话读取五个商城 UI，并验证同内容保存不发起写入。目标作品商品列表为空，商品修改仅通过模拟接口验证，未创建测试商品或改价。
+
+2026-10-28 直接控制升级：84 项单元测试和 18 工具 MCP stdio 检查通过。新增原生启动、增量事件与作品状态汇总。真实 MCP 会话读回作品、章节、变量、数组、商品、UI 分类、UI 模板、剧情、故事线共 9 类资源；启动器接受 scheme 并转发，尚未确认编辑窗口加载就绪。测试覆盖旧日志不冒充当前状态、轮换/截断、部分行、敏感字段隔离、权限失败不启动及启动器失败。

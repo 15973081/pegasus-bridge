@@ -7,6 +7,7 @@ from .scene import SceneService
 from .chapters import ChapterService
 from .storytree import StoryTreeService
 from .mall import MallUIService, GoodsService
+from .editor import EditorService
 
 
 def create_server(bridge: Pegasus | None = None):
@@ -17,6 +18,21 @@ def create_server(bridge: Pegasus | None = None):
     app = FastMCP("pegasus-editor", instructions="PegasusEditor 适配层。支持读取、PNG 素材上传和带备份的 UI、剧情、章节、故事线、商城编辑；需用户授权及有效登录，不支持发布。recent_games 是历史日志。")
     bridge = bridge or Pegasus()
     readonly = {"readOnlyHint": True, "destructiveHint": False}
+
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
+    def pegasus_open_game(game_id: int, wait_seconds: int = 3) -> dict:
+        """通过天马原生协议打开指定作品，不操作鼠标键盘。需已登录且有作品读取权限；发送成功不代表就绪，已有作品可能触发原生未保存确认。不启动试玩。"""
+        return EditorService(bridge).open_game(game_id, wait_seconds)
+
+    @app.tool(annotations=readonly)
+    def pegasus_editor_state(since: dict | None = None) -> dict:
+        """读取原生进程和管道可用性；since 为上次返回的 observation.cursor 或 open_game.cursor，只观察此后的脱敏加载事件。首次调用不回放旧日志。不提供当前页面或实时游戏变量。"""
+        return EditorService(bridge).state(since)
+
+    @app.tool(annotations=readonly)
+    def pegasus_game_state(game_id: int, scene_id: int | None = None, include_ui: bool = False) -> dict:
+        """汇总已保存的作品、章节、变量定义、数组与商品；可选 UI、指定场景的剧情和故事线。返回逐资源读取时间/哈希/错误；非玩家实时状态，不包含未保存编辑。"""
+        return EditorService(bridge).game_state(game_id, scene_id, include_ui)
 
     @app.tool(annotations=readonly)
     def pegasus_status() -> dict:

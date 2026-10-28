@@ -16,6 +16,15 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ("status", "launch", "recent-games", "routes", "mcp"):
         commands.add_parser(name)
+    opening = commands.add_parser('open-game', help='通过原生协议打开作品，不操作鼠标键盘')
+    opening.add_argument('game_id', type=int)
+    opening.add_argument('--wait-seconds', type=int, default=3)
+    editor = commands.add_parser('editor-state', help='读取进程与新的加载事件，不读取玩家实时状态')
+    editor.add_argument('--since-file', help='上次 editor-state/open-game 的 JSON 输出文件')
+    state = commands.add_parser('game-state', help='汇总后台已保存的作品状态')
+    state.add_argument('game_id', type=int)
+    state.add_argument('--scene-id', type=int)
+    state.add_argument('--include-ui', action='store_true')
     logs = commands.add_parser("logs")
     logs.add_argument("--lines", type=int, default=60)
     catalog = commands.add_parser("catalog")
@@ -80,7 +89,27 @@ def main():
             from .server import create_server
             create_server(bridge).run(transport="stdio")
             return
-        if args.command == "logs":
+        if args.command in ('open-game', 'editor-state', 'game-state'):
+            from .editor import EditorService
+            service = EditorService(bridge)
+            if args.command == 'open-game':
+                result = service.open_game(args.game_id, args.wait_seconds)
+            elif args.command == 'game-state':
+                result = service.game_state(args.game_id, args.scene_id, args.include_ui)
+            else:
+                since = None
+                if args.since_file:
+                    saved = json.loads(Path(args.since_file).read_text(encoding='utf-8-sig'))
+                    if not isinstance(saved, dict):
+                        raise BridgeError('游标文件必须是 editor-state/open-game 返回的 JSON 对象')
+                    observed = saved.get('observation', saved)
+                    if not isinstance(observed, dict):
+                        raise BridgeError('游标文件中的 observation 格式无效')
+                    since = observed.get('cursor')
+                    if since is None:
+                        raise BridgeError('文件中无有效 cursor；请重新运行 editor-state')
+                result = service.state(since)
+        elif args.command == "logs":
             result = bridge.logs(args.lines)
         elif args.command == "catalog":
             result = bridge.command_catalog(args.game_id)
