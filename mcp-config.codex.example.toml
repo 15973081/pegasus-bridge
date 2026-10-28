@@ -1,0 +1,10 @@
+# After installing pegasus-bridge. If PATH is unavailable to the GUI client,
+# use the absolute command printed by install.ps1 or `pegasus mcp-config`.
+[mcp_servers.pegasus-editor]
+command = "pegasus-mcp"
+args = []
+startup_timeout_sec = 20
+tool_timeout_sec = 120
+
+[mcp_servers.pegasus-editor.env]
+PEGASUS_ALLOW_LOG_AUTH = "0"

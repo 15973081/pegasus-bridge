@@ -23,8 +23,10 @@ def main():
             item.add_argument('name')
         if name in ('preview-click', 'preview-reset'):
             item.add_argument('--expected-revision', type=int, required=True)
-    for name in ("status", "launch", "recent-games", "routes", "mcp"):
+    for name in ("status", "launch", "recent-games", "routes", "mcp", "doctor-mcp"):
         commands.add_parser(name)
+    config = commands.add_parser('mcp-config', help='打印当前安装的客户端配置，不写入客户端或包含凭据')
+    config.add_argument('--client', choices=['json', 'codex'], default='json')
     opening = commands.add_parser('open-game', help='通过原生协议打开作品，不操作鼠标键盘')
     opening.add_argument('game_id', type=int)
     opening.add_argument('--wait-seconds', type=int, default=3)
@@ -122,7 +124,16 @@ def main():
             from .server import create_server
             create_server(bridge).run(transport="stdio")
             return
-        if args.command.startswith('preview-'):
+        if args.command == 'mcp-config':
+            from .installation import client_config
+            result = client_config(args.client)
+            if isinstance(result, str):
+                print(result)
+                return
+        elif args.command == 'doctor-mcp':
+            from .installation import doctor_mcp
+            result = doctor_mcp()
+        elif args.command.startswith('preview-'):
             from .preview import PreviewService
             service = PreviewService()
             if args.command == 'preview-start':

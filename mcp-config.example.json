@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "pegasus-editor": {
-      "command": "C:\\path\\to\\pegasus-bridge\\.venv\\Scripts\\python.exe",
-      "args": ["-m", "pegasus_bridge.server"],
+      "command": "pegasus-mcp",
+      "args": [],
       "env": {
         "PEGASUS_INSTALL_DIR": "C:\\APP\\PegasusEditor",
         "PEGASUS_ALLOW_LOG_AUTH": "0"

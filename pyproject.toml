@@ -1,17 +1,23 @@
 [project]
 name = "pegasus-bridge"
-version = "0.10.0"
+version = "0.11.0"
 description = "Windows PegasusEditor CLI and MCP adapter for UI, scenes, chapters, story maps and mall editing"
 readme = "README.md"
 authors = [
     { name = "15973081", email = "114197574+15973081@users.noreply.github.com" }
 ]
 requires-python = ">=3.12"
+keywords = ["mcp", "pegasus", "tianma", "game-editor"]
+
 dependencies = [
     "httpx>=0.28,<1",
     "mcp>=1.26,<2",
     "pywin32>=308 ; sys_platform == 'win32'",
 ]
+
+[project.urls]
+Repository = "https://github.com/15973081/pegasus-bridge"
+Documentation = "https://github.com/15973081/pegasus-bridge/blob/main/docs/install.md"
 
 [project.scripts]
 pegasus-bridge = "pegasus_bridge:main"

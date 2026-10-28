@@ -181,6 +181,11 @@ def create_server(bridge: Pegasus | None = None):
 
 
 def main():
+    import argparse
+    from importlib.metadata import version
+    parser = argparse.ArgumentParser(description='PegasusEditor MCP Server (stdio)')
+    parser.add_argument('--version', action='version', version='pegasus-mcp ' + version('pegasus-bridge'))
+    parser.parse_args()
     create_server().run(transport="stdio")
 
 
