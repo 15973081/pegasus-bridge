@@ -29,11 +29,13 @@ Windows 天马编辑器（默认 `C:\APP\PegasusEditor`）的非官方基础适�
 | 原生故事线读取、导出 | `read story_tree` / `export story_tree` | `pegasus_read` / `pegasus_export` | 六个场景在线读回 |
 | 原生故事线节点与连线保存 | `apply-story-tree` | `pegasus_apply_story_tree` | 2026-10-27 六章 45 节点读回，第三章实机显示确认 |
 | 商城 UI 读取、导出 | `read mall_ui` / `export mall_ui` | `pegasus_read` / `pegasus_export` | 首页、三个详情页、剧情锁在线读取 |
-| 商城 UI 源码编辑 | `apply-mall-ui` | `pegasus_apply_mall_ui` | 归属、并发、UTF-16 写入、读回模拟测试；在线未变更路径实测 |
+| 商城 UI 源码编辑 | `apply-mall-ui` | `pegasus_apply_mall_ui` | 五页真实 MCP 保存并精确读回；原生显示待验收 |
+| 商城配置与模板检查 | `mall-overview` | `pegasus_mall_overview` | 真实 MCP 读取五页与商品数 |
+| 生成统一商城设计 | `build-mall-ui` | `pegasus_build_mall_ui` | CLI 生成五页 Lua，分类、分页、详情、已拥有及剧情锁逻辑测试 |
 | 商品列表读取、导出 | `read goods` / `export goods` | `pegasus_read` / `pegasus_export` | 在线读取实测 |
 | 已有商品数据编辑 | `apply-goods` | `pegasus_apply_goods` | 模拟接口测试；尚未实际修改线上商品 |
 
-**限制：** 在线操作使用 `TOKEN` Cookie 与 CSRF 查询参数，写入成功业务码必须为 `200000`。会话过期可能返回 `502001`。0.7.0 支持作品状态、主动上报的玩家/背包观察、本地原生存档，以及图片、UI、剧情、章节、故事线和商城编辑；不支持发布、原生试玩控制或 Unity 内部对象读写。`catalog` 是指令分类缓存，不是场景剧情内容。`recent-games` 是历史记录，不是账号全部作品。响应保留后台结构，`scenes` 的 data、UI 分类中的 command 和 `ui_template` 中的 template 可能是 JSON 字符串，需要再次解析。
+**限制：** 在线操作使用 `TOKEN` Cookie 与 CSRF 查询参数，写入成功业务码必须为 `200000`。会话过期可能返回 `502001`。0.8.0 支持作品状态、主动上报的玩家/背包观察、本地原生存档，以及图片、UI、剧情、章节、故事线、商城编辑与设计生成；不支持发布、原生试玩控制或 Unity 内部对象读写。`catalog` 是指令分类缓存，不是场景剧情内容。`recent-games` 是历史记录，不是账号全部作品。响应保留后台结构，`scenes` 的 data、UI 分类中的 command 和 `ui_template` 中的 template 可能是 JSON 字符串，需要再次解析。
 
 
 ## 使用
@@ -327,6 +329,55 @@ MCP 对应 `pegasus_apply_goods(game_id, goods_id, changes, expected_sha256, bac
 
 两种写入都没有原子 CAS；避免编辑器同时保存。结果不确定时先读回，不自动重试或回滚。备份里的 `before` 保留原内容，可结合当前哈希显式恢复。商品编辑会改变后台数据，调用前应取得目标作品的编辑授权。
 
+### 统一商城设计工具（0.8.0）
+
+`mall-overview` 读取本作品所有商城页面的名称、UUID、源码哈希及后台商品数。`native_product_status` 和 `static_product_list_hint` 是源码文本线索，不能代替运行验证；商品数也不是玩家背包数量。
+
+```powershell
+.\pegasus.cmd mall-overview 123456
+.\pegasus.cmd build-mall-ui 123456 765432 --bindings-file '.\bindings.json' --theme-file '.\theme.json' --output-directory '.\mall-design-v1'
+```
+
+MCP 对应 `pegasus_mall_overview(game_id)` 和 `pegasus_build_mall_ui(game_id, catalog_id, bindings, theme, output_directory)`。生成器核对五个 UI 的作品归属、旧源码哈希和商品说明的归属，只写**全新本地目录**，不保存后台、不创建商品、不发起支付。
+
+`bindings.json` 必须包含五个不同的实际 UI UUID：
+
+```json
+{
+  "home": "11111111-1111-1111-1111-111111111111",
+  "detail": "22222222-2222-2222-2222-222222222222",
+  "detail_repeat": "33333333-3333-3333-3333-333333333333",
+  "detail_permanent": "44444444-4444-4444-4444-444444444444",
+  "lock": "55555555-5555-5555-5555-555555555555"
+}
+```
+
+`theme.json` 支持标题、颜色、素材和按商品 ID 配置的说明。下列素材 ID 仅为格式示例，必须替换为作品已上传的真实引用：
+
+```json
+{
+  "title": "物资室",
+  "subtitle": "医院物资档案",
+  "currency": "金马尼",
+  "font": "NotoSansSC-Regular SDF",
+  "assets": {
+    "background": "$1001", "vignette": "$1002",
+    "paper": "$1003", "card": "$1004", "seal": "$1005",
+    "button": "$1006", "hover": "$1007", "accent": "$1008"
+  },
+  "colors": {"title": "#E8E0D2", "muted": "#ABA5A0", "red": "#C96970", "ink": "#302A26", "inkRed": "#7B3534"},
+  "descriptions": {}
+}
+```
+
+布局为 1920×1080：`background/vignette/paper` 为全屏素材，`paper` 中央须留出约 x=440–1465、y=180–910 的阅读区；`card` 为列表卡片，`seal` 为小图标，`button/hover/accent` 为普通、悬停和选中按钮素材。素材格式会校验，但不会下载核验图像、字体或自动避开素材内嵌文字；须检查预览效果。生成器使用固定医院恐怖主题布局，通用商城可在生成后进一步编辑 Lua。
+
+标题最多 24 字，其余单行文字最多 80 字；颜色为 `#RRGGBB`。说明格式为 `"实际商品ID":{"description":"140 字以内的用途说明"}`，支持换行，最多 500 项。说明显示在 UI 中，不会改写商品后台字段；价格、名称和领取方式来自原生商品数据。
+
+生成目录包含五个 `.lua`、主题配置及 `manifest.json`。按清单中的 `ui_id`、`script_path`、`expected_sha256` 调用 `apply-mall-ui` 保存；每页独立备份和读回，**不是五页原子事务**。失败后先检查已保存页与剩余页，不盲目重试。`applied=false` 是生成时状态，最终保存结果以写工具回执为准。
+
+首页用 `ac.getMallProductStatus()` 读取真实商品，支持分类、六项分页、刷新、空库和读取失败提示；详情以真实 goods ID 调用原生购买按钮，单次已拥有商品不再显示购买入口，可重复商品保留入口。找不到记录时不使用模板商品兜底。剧情锁沿用原生锁定、保存和返回流程。编辑器预览中的 `isAlreadyBuy` 可能恒为 false，购买后的实际解锁仍须在原生运行端确认。本版没有创建测试商品或测试支付。
+
 ## MCP 接入
 
 复制 `mcp-config.example.json` 为本地 `mcp-config.json`，将示例命令替换为实际 Python 绝对路径，再将 `mcpServers.pegasus-editor` 合并进支持该格式的 MCP 客户端配置。本地配置已加入 Git 忽略列表。其他客户端请填写：
@@ -335,7 +386,7 @@ MCP 对应 `pegasus_apply_goods(game_id, goods_id, changes, expected_sha256, bac
 - 参数：`-m`、`pegasus_bridge.server`
 - 传输：stdio
 
-需要在线操作时，在 MCP 客户端的服务器环境变量里配置上述会话。CLI 的 PowerShell 环境不会自动传播给已经运行的桌面客户端。升级后重启或重连 MCP 服务，工具列表应包含 22 个工具。
+需要在线操作时，在 MCP 客户端的服务器环境变量里配置上述会话。CLI 的 PowerShell 环境不会自动传播给已经运行的桌面客户端。升级后重启或重连 MCP 服务，工具列表应包含 24 个工具。
 
 直接启动服务可用 `.\pegasus-mcp.cmd` 或 `uv run pegasus-mcp`；服务等待 MCP 消息，不提供交互式提示符。服务采用 [官方 MCP Python SDK](https://py.sdk.modelcontextprotocol.io/v1/) 的 FastMCP 与 stdio 传输，依赖锁定在 1.x。
 
@@ -358,7 +409,7 @@ uv run python -m unittest discover -s tests -v
 uv run python tests/smoke_mcp.py
 ```
 
-单元测试还覆盖剧情替换的 UTF-16 索引、备份、并发冲突和读回不一致。单元测试覆盖 Windows 进程枚举、脱敏、认证、读取、导出以及 UI 更新的冲突拒绝、备份失败、写后读回、无修改路径、上传凭据隔离和检查点绑定。stdio 集成测试实际启动独立 MCP 子进程，验证初始化、22 个工具发现、写工具的参数与注解、成功调用和无网络的错误调用。测试不修改云端作品。
+单元测试还覆盖剧情替换的 UTF-16 索引、备份、并发冲突和读回不一致。单元测试覆盖 Windows 进程枚举、脱敏、认证、读取、导出以及 UI 更新的冲突拒绝、备份失败、写后读回、无修改路径、上传凭据隔离和检查点绑定。stdio 集成测试实际启动独立 MCP 子进程，验证初始化、24 个工具发现、写工具的参数与注解、成功调用和无网络的错误调用。测试不修改云端作品。
 
 2026-10-26 的独立授权实测通过真实 MCP stdio 会话上传 13 张图片并更新 `playback`，读回确认目标分类一致、其他 UI 分类和剧情脚本未变化、作品仍为草稿。此记录验证接口保存，不代表完成 Unity 内的视觉验收。
 
@@ -369,3 +420,5 @@ uv run python tests/smoke_mcp.py
 2026-10-28 直接控制升级：84 项单元测试和 18 工具 MCP stdio 检查通过。新增原生启动、增量事件与作品状态汇总。真实 MCP 会话读回作品、章节、变量、数组、商品、UI 分类、UI 模板、剧情、故事线共 9 类资源；启动器接受 scheme 并转发，尚未确认编辑窗口加载就绪。测试覆盖旧日志不冒充当前状态、轮换/截断、部分行、敏感字段隔离、权限失败不启动及启动器失败。
 
 2026-10-28 玩家与背包升级：111 项测试，109 项通过、2 项因系统符号链接权限跳过（Windows junction 测试通过）；22 工具 stdio 检查通过。可选 Lua 往返测试在本机安装的 Lupa 中运行，未安装时会跳过。实际六章 Lua 测试产生 223 次有效上报，覆盖 18 份证据、三个结局、前情来源和错误选项恢复。真实 MCP 验证了 4 个本地存档及六章采集代码保存；UI/故事线未变化，作品仍为草稿。原生运行上报验证仍待完成。
+
+2026-10-28 商城设计升级（0.8.0）：121 项测试，119 项通过、2 项符号链接权限跳过；24 工具 stdio 检查通过。CLI 实际生成五页商城 Lua，六种状态的本地渲染无文字溢出。通过真实 MCP 保存首页、三个详情页与剧情锁，五页源码读回一致；基本 UI、六章剧情和商品数据保持不变。目标作品后台无商品，预览样例只用于本地布局检查，未创建商品或执行支付。原生窗口视觉与购买解锁流程尚未验收。

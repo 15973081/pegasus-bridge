@@ -9,6 +9,7 @@ from .storytree import StoryTreeService
 from .mall import MallUIService, GoodsService
 from .editor import EditorService
 from .player import PlayerService
+from .mall_design import MallDesignService
 
 
 def create_server(bridge: Pegasus | None = None):
@@ -19,6 +20,16 @@ def create_server(bridge: Pegasus | None = None):
     app = FastMCP("pegasus-editor", instructions="PegasusEditor 适配层。支持配置、原生本地存档、显式上报的玩家与背包状态读取，以及带备份的 UI、剧情、章节、故事线、商城编辑。在线操作需授权及有效登录，不支持发布。recent_games 是历史日志；player_state/inventory 必须检查 status/fresh，非实时内存查询，无上报不能当空背包。")
     bridge = bridge or Pegasus()
     readonly = {"readOnlyHint": True, "destructiveHint": False}
+
+    @app.tool(annotations=readonly)
+    def pegasus_mall_overview(game_id: int) -> dict:
+        """检查商城 UI ID、名称、源码哈希、原生商品读取和模板静态商品线索；返回后台商品数，不是玩家库存。"""
+        return MallDesignService(bridge).overview(game_id)
+
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
+    def pegasus_build_mall_ui(game_id: int, catalog_id: int, bindings: dict, theme: dict, output_directory: str) -> dict:
+        """生成医院恐怖风商城首页、三类详情与剧情锁 Lua。bindings 必须指定 home/detail/detail_repeat/detail_permanent/lock 的真实 UI ID；theme 支持 title/subtitle/currency/font/assets/colors/descriptions，assets 含 background/vignette/paper/card/seal/button/hover/accent。读取真实归属及旧哈希，仅写全新本地目录；用 apply_mall_ui 逐页保存，不购买或创建商品。"""
+        return MallDesignService(bridge).build(game_id,catalog_id,bindings,theme,output_directory)
 
     @app.tool(annotations=readonly)
     def pegasus_player_state(game_id: int, max_age_seconds: int = 30) -> dict:

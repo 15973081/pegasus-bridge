@@ -25,6 +25,14 @@ def main():
     state.add_argument('game_id', type=int)
     state.add_argument('--scene-id', type=int)
     state.add_argument('--include-ui', action='store_true')
+    overview = commands.add_parser('mall-overview', help='检查商城 UI 与商品配置')
+    overview.add_argument('game_id', type=int)
+    build_mall = commands.add_parser('build-mall-ui', help='生成五页原生商城设计与保存清单，不写后台')
+    build_mall.add_argument('game_id', type=int)
+    build_mall.add_argument('catalog_id', type=int)
+    build_mall.add_argument('--bindings-file', required=True)
+    build_mall.add_argument('--theme-file', required=True)
+    build_mall.add_argument('--output-directory', required=True)
     for name in ('player-state', 'inventory'):
         player = commands.add_parser(name, help='读取作品主动上报的玩家状态或背包，保留新鲜度')
         player.add_argument('game_id', type=int)
@@ -100,7 +108,16 @@ def main():
             from .server import create_server
             create_server(bridge).run(transport="stdio")
             return
-        if args.command in ('player-state', 'inventory'):
+        if args.command in ('mall-overview', 'build-mall-ui'):
+            from .mall_design import MallDesignService
+            service = MallDesignService(bridge)
+            if args.command == 'mall-overview':
+                result = service.overview(args.game_id)
+            else:
+                bindings = json.loads(Path(args.bindings_file).read_text(encoding='utf-8-sig'))
+                theme = json.loads(Path(args.theme_file).read_text(encoding='utf-8-sig'))
+                result = service.build(args.game_id,args.catalog_id,bindings,theme,args.output_directory)
+        elif args.command in ('player-state', 'inventory'):
             from .player import PlayerService
             service = PlayerService(bridge)
             result = getattr(service, args.command.replace('-', '_'))(args.game_id, args.max_age_seconds)
