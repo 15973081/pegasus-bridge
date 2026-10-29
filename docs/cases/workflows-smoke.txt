@@ -1,0 +1,15 @@
+Processing request of type ListToolsRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+{
+  "tool_count": 48,
+  "local_mcp_workflows": true,
+  "cloud_writes": false,
+  "route_snapshots": 3
+}

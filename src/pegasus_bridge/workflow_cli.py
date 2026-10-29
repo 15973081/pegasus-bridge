@@ -3,13 +3,14 @@ from .workfiles import read_json
 from .authoring import AuthoringService,build_scene
 from .audio import AudioService
 from .batch import BatchService
+from .drafts import DraftService
 from .validation import validate_scene
 from .project import project_check,project_pack
 from .qa import test_route,preview_report
 
 COMMANDS={'authoring-init','authoring-read','character-add','character-place','build-scene','validate-scene',
           'batch-plan','batch-apply','batch-resume','history','diff','restore','upload-audio','audio-bind',
-          'test-route','preview-report','project-check','project-pack'}
+          'test-route','preview-report','project-check','project-pack','list-drafts','save-draft'}
 
 def add_arguments(commands):
     def command(name,*positionals,**options):
@@ -33,6 +34,12 @@ def add_arguments(commands):
     command('test-route','manifest_path','route_path','output_directory')
     command('preview-report','manifest_path','route_path','output_directory')
     command('project-check','manifest_path');command('project-pack','manifest_path','output_path')
+    p=commands.add_parser('list-drafts')
+    p.add_argument('game_id',type=int)
+    p=commands.add_parser('save-draft')
+    p.add_argument('game_id',type=int)
+    p.add_argument('name')
+    p.add_argument('--checkpoint',required=True)
 
 def run(args,bridge):
     c=args.command;a=args;author=AuthoringService(bridge);batch=BatchService(bridge)
@@ -54,4 +61,6 @@ def run(args,bridge):
     if c=='preview-report':return preview_report(a.manifest_path,a.route_path,a.output_directory)
     if c=='project-check':return project_check(a.manifest_path)
     if c=='project-pack':return project_pack(a.manifest_path,a.output_path)
+    if c=='list-drafts':return DraftService(bridge).list_drafts(a.game_id)
+    if c=='save-draft':return DraftService(bridge).save_draft(a.game_id,a.name,a.checkpoint)
     raise AssertionError(c)

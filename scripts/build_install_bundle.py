@@ -18,7 +18,8 @@ def build_bundle():
                     'pegasus_bridge/preview.html', 'pegasus_bridge/preview_runtime.py',
                     'pegasus_bridge/authoring.py', 'pegasus_bridge/workflow_tools.py',
                     'pegasus_bridge/validation.py', 'pegasus_bridge/batch.py',
-                    'pegasus_bridge/audio.py', 'pegasus_bridge/project.py', 'pegasus_bridge/qa.py'}
+                    'pegasus_bridge/audio.py', 'pegasus_bridge/project.py', 'pegasus_bridge/qa.py',
+                    'pegasus_bridge/drafts.py'}
         if not required <= set(archive.namelist()):
             raise SystemExit('Incomplete wheel.')
     files = {
@@ -27,6 +28,7 @@ def build_bundle():
         'INSTALL.md': ROOT / 'docs/install.md',
         'preview.md': ROOT / 'docs/preview.md',
         'workflows.md': ROOT / 'docs/workflows.md',
+        'native-drafts.md': ROOT / 'docs/native-drafts.md',
         'examples/preview/preview.json': ROOT / 'examples/preview/preview.json',
         'examples/preview/scene.lua': ROOT / 'examples/preview/scene.lua',
     }

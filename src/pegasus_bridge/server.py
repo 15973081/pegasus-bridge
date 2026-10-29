@@ -17,7 +17,7 @@ def create_server(bridge: Pegasus | None = None):
     # Do not let transport diagnostics expose authenticated query strings.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
-    app = FastMCP("pegasus-editor", instructions="PegasusEditor 适配层。支持配置、原生本地存档、显式上报的玩家与背包状态读取，以及带备份的 UI、剧情、章节、故事线、商城编辑。在线操作需授权及有效登录，不支持发布。recent_games 是历史日志；player_state/inventory 必须检查 status/fresh，非实时内存查询，无上报不能当空背包。")
+    app = FastMCP("pegasus-editor", instructions="PegasusEditor 适配层。支持配置、原生本地存档、显式上报的玩家与背包状态读取，以及带备份的 UI、剧情、章节、故事线、商城编辑和原生命名草稿创建/列表读取。草稿基于后台已保存内容，不提交编辑器内存中尚未同步的修改。在线操作需授权及有效登录，不支持发布。recent_games 是历史日志；player_state/inventory 必须检查 status/fresh，非实时内存查询，无上报不能当空背包。")
     bridge = bridge or Pegasus()
     readonly = {"readOnlyHint": True, "destructiveHint": False}
 

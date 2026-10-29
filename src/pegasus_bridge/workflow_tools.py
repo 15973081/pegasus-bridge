@@ -2,6 +2,7 @@
 from .authoring import AuthoringService, build_scene
 from .audio import AudioService
 from .batch import BatchService
+from .drafts import DraftService
 from .project import project_check, project_pack
 from .qa import test_route, preview_report
 from .validation import validate_scene
@@ -12,6 +13,16 @@ def register(app,bridge):
     local={'readOnlyHint':False,'destructiveHint':False,'openWorldHint':False}
     edit={'readOnlyHint':False,'destructiveHint':True,'openWorldHint':True}
     author=AuthoringService(bridge);batch=BatchService(bridge)
+
+    @app.tool(annotations={**ro,'openWorldHint':True})
+    def pegasus_list_drafts(game_id:int)->dict:
+        """读取天马编辑器“打开/保存”窗口使用的原生命名备份列表。来源为后台已保存内容，不是玩家存档或本地剧情备份。"""
+        return DraftService(bridge).list_drafts(game_id)
+
+    @app.tool(annotations={**local,'openWorldHint':True,'idempotentHint':False})
+    def pegasus_save_draft(game_id:int,name:str,checkpoint:str)->dict:
+        """为后台已保存作品创建原生命名草稿，等同保存窗口的新增备份操作。checkpoint 记录请求并支持结果不确定时核对；服务端无幂等键，不可盲目换检查点重试。不提交编辑器内存中尚未同步的修改，不发布、不覆盖或恢复旧备份。"""
+        return DraftService(bridge).save_draft(game_id,name,checkpoint)
 
     @app.tool(annotations=local)
     def pegasus_authoring_init(manifest_path:str,game_id:int)->dict:

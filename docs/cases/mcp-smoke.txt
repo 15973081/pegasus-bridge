@@ -1,0 +1,17 @@
+Processing request of type ListToolsRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+Processing request of type CallToolRequest
+{"handshake": "passed", "tools": ["pegasus_preview_start", "pegasus_preview_state", "pegasus_preview_click", "pegasus_preview_reset", "pegasus_preview_stop", "pegasus_ensure_checkpoint_variable", "pegasus_mall_overview", "pegasus_build_mall_ui", "pegasus_player_state", "pegasus_inventory", "pegasus_list_archives", "pegasus_read_archive", "pegasus_open_game", "pegasus_editor_state", "pegasus_game_state", "pegasus_status", "pegasus_launch", "pegasus_recent_games", "pegasus_routes", "pegasus_logs", "pegasus_command_catalog", "pegasus_read", "pegasus_export", "pegasus_upload_image", "pegasus_apply_ui_template", "pegasus_apply_scene", "pegasus_ensure_chapter", "pegasus_apply_story_tree", "pegasus_apply_mall_ui", "pegasus_apply_goods", "pegasus_authoring_init", "pegasus_authoring_read", "pegasus_character_add", "pegasus_character_place", "pegasus_build_scene", "pegasus_validate_scene", "pegasus_batch_plan", "pegasus_batch_apply", "pegasus_batch_resume", "pegasus_history", "pegasus_diff", "pegasus_restore", "pegasus_upload_audio", "pegasus_audio_bind", "pegasus_test_route", "pegasus_preview_report", "pegasus_project_check", "pegasus_project_pack"], "status_call": "passed", "error_call": "passed"}

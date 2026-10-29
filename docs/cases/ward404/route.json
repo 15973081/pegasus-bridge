@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "initial": {
+    "visible": {
+      "w404_portrait_1": true
+    },
+    "text": {
+      "w404_portrait_caption_1": "你"
+    }
+  },
+  "steps": [
+    {
+      "click": "w404_choice_1",
+      "expect": {
+        "text": {
+          "w404_title": "没有姓名的腕带"
+        }
+      }
+    },
+    {
+      "click": "w404_choice_1",
+      "expect": {
+        "text": {
+          "w404_portrait_caption_1": "林默"
+        }
+      }
+    },
+    {
+      "click": "w404_help",
+      "expect": {
+        "visible": {
+          "w404_portrait_1": false
+        }
+      }
+    }
+  ]
+}

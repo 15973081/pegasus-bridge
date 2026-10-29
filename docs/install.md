@@ -10,18 +10,18 @@
 
 ## Windows 安装包
 
-先安装 uv（https://docs.astral.sh/uv/getting-started/installation/）。解压 `pegasus-mcp-0.11.0-windows.zip` 后，在该目录的 PowerShell 执行：
+先安装 [uv](https://docs.astral.sh/uv/getting-started/installation/)。解压 `pegasus-mcp-0.13.0-windows.zip` 后，在该目录的 PowerShell 执行：
 
 ```powershell
 .\install.ps1
 ```
 
-安装器调用 `uv tool install`，在用户级独立环境中安装 wheel 和浏览器预览依赖，创建 `pegasus`、`pegasus-bridge`、`pegasus-mcp` 命令。无需管理员权限，不依赖源码仓库的 `.venv`。需要网络下载 Python（缺少时）及依赖，因此此 ZIP 不是完整离线安装包。不会自动安装 uv、修改执行策略或覆盖冲突命令。
+安装器调用 `uv tool install`，在用户级独立环境中安装 wheel、浏览器预览及画面报告依赖，创建 `pegasus`、`pegasus-bridge`、`pegasus-mcp` 命令。无需管理员权限，不依赖源码仓库的 `.venv`。需要网络下载 Python（缺少时）及依赖，因此此 ZIP 不是完整离线安装包。不会自动安装 uv、修改执行策略或覆盖冲突命令。
 
 如本机策略不允许运行脚本，可直接执行同等安装命令，而无需修改策略：
 
 ```powershell
-uv tool install --python 3.12 ".\pegasus_bridge-0.11.0-py3-none-any.whl[preview]"
+uv tool install --python 3.12 ".\pegasus_bridge-0.13.0-py3-none-any.whl[preview,qa]"
 ```
 
 如果命令目录尚未在 PATH 中，安装器会打印完整路径。可运行 `uv tool dir --bin` 查看该目录，再从完整路径执行命令。
@@ -31,10 +31,10 @@ uv tool install --python 3.12 ".\pegasus_bridge-0.11.0-py3-none-any.whl[preview]
 ```powershell
 git clone https://github.com/15973081/pegasus-bridge.git
 cd pegasus-bridge
-uv tool install --python 3.12 ".[preview]"
+uv tool install --python 3.12 ".[preview,qa]"
 ```
 
-这是非 editable 安装；完成后可在任意目录运行，修改源码不会自动改变已安装版本。开发环境仍可使用 `uv sync --locked --extra preview --inexact`。
+这是非 editable 安装；完成后可在任意目录运行，修改源码不会自动改变已安装版本。开发环境可使用 `uv sync --locked --extra preview --extra qa`。画面报告需要 Playwright Chromium 或本机 Edge；开发环境缺少浏览器时可运行 `uv run python -m playwright install chromium`。
 
 ## 检查实际 MCP 协议
 
@@ -81,11 +81,11 @@ pegasus mcp-config --client json
 
 离线预览、安装自检和本地诊断不需要天马会话。在线读取或编辑作品需要有效认证。生成的公开配置默认 `PEGASUS_ALLOW_LOG_AUTH=0`，不包含 TOKEN/Cookie。
 
-若明确使用自己这台电脑已登录的天马会话，可在本机配置中启用 `PEGASUS_ALLOW_LOG_AUTH=1`；新注册时也可用 `install.ps1 -RegisterCodex -AllowLogAuth`。不会向安装包写入会话凭据。其他认证方式见仓库 README。
+若明确使用自己这台电脑已登录的天马会话，可在本机配置中启用 `PEGASUS_ALLOW_LOG_AUTH=1`；新注册时也可用 `install.ps1 -RegisterCodex -AllowLogAuth`。不会向安装包写入会话凭据。其他认证方式见仓库中的 `docs/reference.md`（在线操作的认证配置）。
 
 ## 升级与卸载
 
-升级时安装新的 wheel；使用 `uv tool install --upgrade` 允许更新现有工具及依赖。然后重启客户端的该 MCP 连接。不要为了普通升级使用 `--force` 覆盖不相关命令。
+升级前先结束本工具的预览会话，并断开客户端中的该 MCP 服务，避免 Windows 正在使用的进程锁住安装目录。安装新的 wheel 时使用 `uv tool install --upgrade` 允许更新现有工具及依赖，再重新连接 MCP 服务并运行 `pegasus doctor-mcp`。不要为了普通升级使用 `--force` 覆盖不相关命令。
 
 ```powershell
 codex mcp remove pegasus-editor

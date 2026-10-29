@@ -1,0 +1,54 @@
+{
+  "passed": true,
+  "failure": null,
+  "steps": [
+    {
+      "step": 0,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "step": 1,
+      "click": "w404_choice_1",
+      "passed": true,
+      "errors": []
+    },
+    {
+      "step": 2,
+      "click": "w404_choice_1",
+      "passed": true,
+      "errors": []
+    },
+    {
+      "step": 3,
+      "click": "w404_help",
+      "passed": true,
+      "errors": []
+    }
+  ],
+  "snapshots": 4,
+  "script_sha256": "7dd7559a61b5cab1c6ae7e05303c550b6d9fd0a16bb3d0d83c891ff2951892e4",
+  "native_runtime_verified": false,
+  "layouts": [
+    {
+      "step": 0,
+      "screenshot": "screen-000.png",
+      "text_overflow": []
+    },
+    {
+      "step": 1,
+      "screenshot": "screen-001.png",
+      "text_overflow": []
+    },
+    {
+      "step": 2,
+      "screenshot": "screen-002.png",
+      "text_overflow": []
+    },
+    {
+      "step": 3,
+      "screenshot": "screen-003.png",
+      "text_overflow": []
+    }
+  ]
+}

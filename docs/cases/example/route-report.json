@@ -1,0 +1,26 @@
+{
+  "passed": true,
+  "failure": null,
+  "steps": [
+    {
+      "step": 0,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "step": 1,
+      "click": "next",
+      "passed": true,
+      "errors": []
+    },
+    {
+      "step": 2,
+      "click": "next",
+      "passed": true,
+      "errors": []
+    }
+  ],
+  "snapshots": 3,
+  "script_sha256": "66139bf55ff4140a483c9236df25d405a75e86e2b1073fd3bc9ff6e8ca00a2c1",
+  "native_runtime_verified": false
+}

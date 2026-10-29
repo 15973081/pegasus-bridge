@@ -5,7 +5,7 @@ param(
     [switch]$AllowLogAuth
 )
 $ErrorActionPreference = 'Stop'
-$packageVersion = '0.12.0'
+$packageVersion = '0.13.0'
 $uvCommand = Get-Command uv -ErrorAction SilentlyContinue
 if (-not $uvCommand) {
     throw 'uv is required. Install uv first: https://docs.astral.sh/uv/getting-started/installation/'

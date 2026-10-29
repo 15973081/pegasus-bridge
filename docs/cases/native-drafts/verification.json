@@ -1,0 +1,28 @@
+{
+  "tool_count": 50,
+  "game_id": 2445700,
+  "draft": {
+    "id": 672294,
+    "gameId": 2445700,
+    "backupName": "404病房_角色与调查版_MCP_20261029",
+    "mode": 8,
+    "isAuto": 0,
+    "createTime": 1793251636000
+  },
+  "before_count": 1,
+  "after_count": 2,
+  "created_verified": true,
+  "repeated_call_reused": true,
+  "scenes_unchanged": 6,
+  "scene_sha256": {
+    "15569599": "08b93ebfb7647a9551164be0082cac6e78e3188efd5859b594569545a5d46091",
+    "15589101": "7afe7f258a147e3354e309ce1af0763c9dfb384899487280f6f69337536eab6e",
+    "15589104": "4d31e3f773938b443eef408cb08063c120cdaeb05e7b48ba1655b61b997cea17",
+    "15589105": "605a72cabf0f9f5bdec20926a88647e79b05794fc49fe17065d714879009ab1e",
+    "15589106": "853ba1ee4d73b7378baafddea0b67f369121d2731318e3cfb17a692ea6b5be66",
+    "15589108": "f364a56e7cef6de911db52402b12ec810463deb3d6194942ef3f667a847adacd"
+  },
+  "native_ui_observed": false,
+  "publish_requested": false,
+  "restore_requested": false
+}
