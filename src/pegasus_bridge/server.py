@@ -21,6 +21,29 @@ def create_server(bridge: Pegasus | None = None):
     bridge = bridge or Pegasus()
     readonly = {"readOnlyHint": True, "destructiveHint": False}
 
+    @app.tool(annotations={**readonly, "openWorldHint": True})
+    def pegasus_get_orientation(game_id: int) -> dict:
+        """读取两处后台方向、并发哈希、逻辑画布尺寸与方向版本创建能力。1=横版，2=竖版；mode=8 是天马编辑器。已有作品原地切换不受支持；不等于原生界面验证。"""
+        from .orientation import OrientationService
+        return OrientationService(bridge).get_orientation(game_id)
+
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
+    def pegasus_set_orientation(game_id: int, orientation: Literal['horizontal', 'vertical'],
+                                expected_sha256: str, checkpoint: str) -> dict:
+        """兼容旧版方向请求和检查点。已有作品方向不同时返回 unsupported，不再向后台发送修改；相同方向或旧检查点仅读回核验，并写本地检查点。创建新方向版本请用 create_orientation_variant。"""
+        from .orientation import OrientationService
+        return OrientationService(bridge).set_orientation(game_id, orientation, expected_sha256, checkpoint)
+
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": False,
+                           "idempotentHint": False, "openWorldHint": True})
+    def pegasus_create_orientation_variant(source_game_id: int, name: str,
+                                           orientation: Literal['horizontal', 'vertical'],
+                                           expected_sha256: str, checkpoint: str) -> dict:
+        """根据源作品基本信息创建独立横/竖版空白工程，mode 固定 8、模板 28/32，不修改原作或参加比赛。先 get_orientation 获取源哈希。检查点保存新 ID、初始化状态及双重读回；不确定请求不重发，同名作品不自动接管。verified 仅表示新方向工程已核验，素材/剧情/UI 未复制，迁移状态另列；不发布。"""
+        from .orientation_variant import OrientationVariantService
+        return OrientationVariantService(bridge).create_variant(
+            source_game_id, name, orientation, expected_sha256, checkpoint)
+
     from .preview import PreviewService
     preview = PreviewService()
 

@@ -4,7 +4,7 @@
 
 Pegasus Bridge 是面向 **Windows 天马工坊编辑器（PegasusEditor）** 的第三方适配工具，非官方产品。它提供终端命令 `pegasus` 和标准 stdio MCP 服务 `pegasus-mcp`，两种入口共用同一套功能，不修改编辑器安装文件。
 
-**当前版本：0.13.0 · Windows · Python 3.12+ · 50 个 MCP 工具**
+**当前版本：0.15.0 · Windows · Python 3.12+ · 53 个 MCP 工具**
 
 [快速开始](#快速开始) · [功能一览](#功能一览) · [案例与截图](#案例与截图) · [测试结果](#测试结果) · [完整文档](#完整文档)
 
@@ -46,7 +46,7 @@ uv tool install --python 3.12 ".[preview,qa]"
 pegasus doctor-mcp
 ```
 
-安装到独立用户环境，无需管理员权限。`doctor-mcp` 会实际启动 MCP 子进程，检查初始化、工具发现和状态调用；0.13.0 应返回 `tool_count: 50`。如果命令未加入 PATH，运行 `uv tool dir --bin` 查看命令目录。
+安装到独立用户环境，无需管理员权限。`doctor-mcp` 会实际启动 MCP 子进程，检查初始化、工具发现和状态调用；0.15.0 应返回 `tool_count: 53`。如果命令未加入 PATH，运行 `uv tool dir --bin` 查看命令目录。
 
 也支持本地 wheel / Windows ZIP 安装，详见 [安装与升级](docs/install.md)。目前不通过 PyPI 或插件市场分发。
 
@@ -162,3 +162,12 @@ uv run pegasus preview-report examples/workflows/preview.json examples/workflows
 | [操作参考](docs/reference.md) | 认证、作品读写、UI、章节、故事线、商城、存档与观察数据 |
 | [案例与测试记录](docs/cases.md) | 真实截图、复现命令、JSON 报告和测试输出 |
 | [历史验证记录](docs/validation-history.md) | 各版本的测试与原生接口验证记录 |
+
+## 横竖版工程（0.15）
+
+`pegasus_get_orientation` 返回两处后台方向、逻辑画布尺寸和创建能力。
+新增 `pegasus_create_orientation_variant`，按源作品基本信息创建横版或竖版空白工程，
+固定使用天马 `mode=8`，保存检查点并核验初始化结果；原作不变，内容迁移单独报告为未开始。
+旧 `pegasus_set_orientation` 对方向变更返回 `unsupported`，停止发送已实测无效的修改请求；
+旧检查点仍可读回核对。新建竖版不等于既有作品已转换或 UI 已适配。
+参数与验证边界见 [横竖版工程](docs/orientation.md)。

@@ -12,8 +12,28 @@ async def main():
             await session.initialize()
             tools = await session.list_tools()
             names = [tool.name for tool in tools.tools]
-            assert len(names) == 50, names
+            assert len(names) == 53, names
             by_name = {tool.name: tool for tool in tools.tools}
+            variant = by_name['pegasus_create_orientation_variant']
+            assert variant.annotations.destructiveHint is False
+            assert variant.annotations.readOnlyHint is False
+            assert set(variant.inputSchema['required']) == {
+                'source_game_id', 'name', 'orientation', 'expected_sha256', 'checkpoint'}
+            assert variant.inputSchema['properties']['orientation']['enum'] == ['horizontal', 'vertical']
+            bad_variant = await session.call_tool('pegasus_create_orientation_variant', {
+                'source_game_id': -1, 'name': 'test', 'orientation': 'vertical',
+                'expected_sha256': '0'*64, 'checkpoint': 'unused-variant.json'})
+            assert bad_variant.isError
+            assert by_name['pegasus_get_orientation'].annotations.readOnlyHint is True
+            assert by_name['pegasus_set_orientation'].annotations.readOnlyHint is False
+            assert by_name['pegasus_set_orientation'].annotations.destructiveHint is False
+            orientation_schema = by_name['pegasus_set_orientation'].inputSchema
+            assert set(orientation_schema['required']) == {'game_id', 'orientation', 'expected_sha256', 'checkpoint'}
+            assert orientation_schema['properties']['orientation']['enum'] == ['horizontal', 'vertical']
+            invalid_orientation = await session.call_tool('pegasus_set_orientation', {
+                'game_id': 42, 'orientation': 'diagonal', 'expected_sha256': '0'*64,
+                'checkpoint': 'unused-orientation.json'})
+            assert invalid_orientation.isError
             assert by_name['pegasus_list_drafts'].annotations.readOnlyHint is True
             assert by_name['pegasus_list_drafts'].annotations.openWorldHint is True
             assert by_name['pegasus_save_draft'].annotations.readOnlyHint is False

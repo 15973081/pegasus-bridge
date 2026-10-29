@@ -45,7 +45,8 @@ async def _probe():
                 required = {'pegasus_status', 'pegasus_apply_scene', 'pegasus_preview_start',
                             'pegasus_character_add', 'pegasus_batch_resume', 'pegasus_project_pack',
                             'pegasus_upload_audio', 'pegasus_validate_scene', 'pegasus_preview_report',
-                            'pegasus_list_drafts', 'pegasus_save_draft'}
+                            'pegasus_list_drafts', 'pegasus_save_draft',
+                            'pegasus_get_orientation', 'pegasus_set_orientation', 'pegasus_create_orientation_variant'}
                 if not required <= set(names):
                     raise BridgeError('MCP 工具列表缺少必要接口')
                 status = await session.call_tool('pegasus_status', {})

@@ -43,7 +43,7 @@ class InstallationTests(unittest.TestCase):
         self.assertTrue(report['list_tools'])
         self.assertTrue(report['status_call'])
         self.assertEqual(report['transport'], 'stdio')
-        self.assertEqual(report['tool_count'], 50)
+        self.assertEqual(report['tool_count'], 53)
         self.assertIn('pegasus_preview_start', report['tools'])
         self.assertIn('pegasus_save_draft', report['tools'])
         self.assertIn('pegasus_list_drafts', report['tools'])
