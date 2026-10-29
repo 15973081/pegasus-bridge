@@ -8,6 +8,7 @@
 
 | 能力 | CLI | MCP | 验证情况 |
 |---|---|---|---|
+| 后台作品列表与搜索 | `list-games`、`resolve-game` | `pegasus_list_games`、`pegasus_resolve_game` | 独立分页与名称/ID 核对，详见 [作品查找](game-discovery.md) |
 | 安装、构建信息、进程诊断 | `status` | `pegasus_status` | 本机实测 |
 | 启动编辑器 | `launch` | `pegasus_launch` | 本机实测启动 |
 | 无鼠标键盘打开作品 | `open-game` | `pegasus_open_game` | 原生启动器实测转发；作品加载就绪尚未确认 |

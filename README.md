@@ -4,7 +4,7 @@
 
 Pegasus Bridge 是面向 **Windows 天马工坊编辑器（PegasusEditor）** 的第三方适配工具，非官方产品。它提供终端命令 `pegasus` 和标准 stdio MCP 服务 `pegasus-mcp`，两种入口共用同一套功能，不修改编辑器安装文件。
 
-**当前版本：0.16.0 · Windows · Python 3.12+ · 58 个 MCP 工具**
+**当前版本：0.17.0 · Windows · Python 3.12+ · 60 个 MCP 工具**
 
 [快速开始](#快速开始) · [功能一览](#功能一览) · [案例与截图](#案例与截图) · [测试结果](#测试结果) · [完整文档](#完整文档)
 
@@ -16,6 +16,7 @@ Pegasus Bridge 是面向 **Windows 天马工坊编辑器（PegasusEditor）** �
 
 | 你要做的事 | 工具能完成什么 | 主要 CLI 命令 |
 |---|---|---|
+| 查找和核对作品 | 分页遍历后台作品，按名称或 ID 匹配，返回同名候选与扫描完整性 | `list-games`、`resolve-game` |
 | 查看和导出作品 | 读取作品、场景、剧情、变量、UI、故事线及商品配置 | `game-state`、`read`、`export` |
 | 保存命名草稿 | 调用编辑器“保存”使用的备份接口，创建新草稿并读回列表核对 | `save-draft`、`list-drafts` |
 | 修改剧情和章节 | 保存 Lua 源码，创建或复用章节/场景，更新故事线节点与连线 | `apply-scene`、`ensure-chapter`、`apply-story-tree` |
@@ -46,7 +47,7 @@ uv tool install --python 3.12 ".[preview,qa]"
 pegasus doctor-mcp
 ```
 
-安装到独立用户环境，无需管理员权限。`doctor-mcp` 会实际启动 MCP 子进程，检查初始化、工具发现和状态调用；0.16.0 应返回 `tool_count: 58`。如果命令未加入 PATH，运行 `uv tool dir --bin` 查看命令目录。
+安装到独立用户环境，无需管理员权限。`doctor-mcp` 会实际启动 MCP 子进程，检查初始化、工具发现和状态调用；0.17.0 应返回 `tool_count: 60`。如果命令未加入 PATH，运行 `uv tool dir --bin` 查看命令目录。
 
 也支持本地 wheel / Windows ZIP 安装，详见 [安装与升级](docs/install.md)。目前不通过 PyPI 或插件市场分发。
 
@@ -120,6 +121,8 @@ pegasus save-draft 123456 "第一章_立绘完成" --checkpoint .\exports\draft-
 
 ## 测试结果
 
+**0.17.0，本机验证日期：2026-10-29。** 共 248 项单元测试，246 项通过、2 项因 Windows 符号链接权限跳过。真实 stdio MCP 发现 60 个工具；以每页 2 个作品遍历 3 页，核对当前账号 5 个作品，名称和 ID 均定位到测试作品 2452144。多候选、截断和无匹配返回状态均通过实测。详见 [后台作品查找](docs/game-discovery.md)。
+
 **0.16.0，本机验证日期：2026-10-29。** 单元测试共 228 项，226 项通过，2 项因 Windows 符号链接权限跳过。新增跨资源计划、反向恢复与原生人工验收报告；本轮未进行云端写入或 Unity 原生试玩。详见 [项目修改与原生验收](docs/project-changes.md)。下面保留历史版本验收记录。
 
 **0.13.0，本机验证日期：2026-10-29。**
@@ -158,6 +161,7 @@ uv run pegasus preview-report examples/workflows/preview.json examples/workflows
 | 文档 | 内容 |
 |---|---|
 | [安装与接入](docs/install.md) | 源码、Windows ZIP、MCP 配置、自检与升级 |
+| [后台作品查找](docs/game-discovery.md) | 独立列举与搜索、分页续查、同名候选及登录错误 |
 | [原生命名草稿](docs/native-drafts.md) | 编辑器保存窗口对应的命名备份，创建与列举 |
 | [创作工作流](docs/workflows.md) | 角色、音频、Lua 检查、批量任务、恢复与工程打包 |
 | [浏览器预览](docs/preview.md) | 预览清单、交互接口、支持范围和会话管理 |

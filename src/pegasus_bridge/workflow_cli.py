@@ -9,11 +9,13 @@ from .project import project_check,project_pack
 from .qa import test_route,preview_report
 from .change_plan import ChangePlanService
 from .native_qa import NativeQAService
+from .games import GameDiscoveryService
 
 COMMANDS={'authoring-init','authoring-read','character-add','character-place','build-scene','validate-scene',
           'batch-plan','batch-apply','batch-resume','history','diff','restore','upload-audio','audio-bind',
           'test-route','preview-report','project-check','project-pack','list-drafts','save-draft',
-          'change-plan','change-apply','change-reverse-plan','native-qa-begin','native-qa-report'}
+          'change-plan','change-apply','change-reverse-plan','native-qa-begin','native-qa-report',
+          'list-games','resolve-game'}
 
 def add_arguments(commands):
     def command(name,*positionals,**options):
@@ -21,6 +23,13 @@ def add_arguments(commands):
         for key in positionals:p.add_argument(key)
         for key,value in options.items():p.add_argument('--'+key.replace('_','-'),**value)
         return p
+    command('list-games',query=dict(),offset=dict(type=int,default=0),page_size=dict(type=int,default=100),
+            max_pages=dict(type=int,default=10),match_mode=dict(choices=['contains','exact'],default='contains'))
+    p=command('resolve-game',contains=dict(action='store_true'),page_size=dict(type=int,default=100),
+              max_pages=dict(type=int,default=100))
+    selector=p.add_mutually_exclusive_group(required=True)
+    selector.add_argument('--game-id',type=int)
+    selector.add_argument('--name')
     command('authoring-init','manifest_path',game_id=dict(type=int,required=True))
     command('authoring-read','manifest_path')
     command('character-add','manifest_path','character_id','name',game_id=dict(type=int,required=True),expressions_file=dict(required=True),expected_sha256=dict())
@@ -53,6 +62,8 @@ def add_arguments(commands):
 
 def run(args,bridge):
     c=args.command;a=args;author=AuthoringService(bridge);batch=BatchService(bridge)
+    if c=='list-games':return GameDiscoveryService(bridge).list_games(a.query,a.offset,a.page_size,a.max_pages,a.match_mode)
+    if c=='resolve-game':return GameDiscoveryService(bridge).resolve_game(a.game_id,a.name,not a.contains,a.page_size,a.max_pages)
     if c=='change-plan':return ChangePlanService(bridge).plan(a.manifest_path,a.output_directory)
     if c=='change-apply':return ChangePlanService(bridge).apply(a.plan_path)
     if c=='change-reverse-plan':return ChangePlanService(bridge).reverse_plan(a.plan_path,a.output_directory)

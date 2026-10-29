@@ -12,8 +12,16 @@ async def main():
             await session.initialize()
             tools = await session.list_tools()
             names = [tool.name for tool in tools.tools]
-            assert len(names) == 58, names
+            assert len(names) == 60, names
             by_name = {tool.name: tool for tool in tools.tools}
+            for name in ('pegasus_list_games', 'pegasus_resolve_game'):
+                assert by_name[name].annotations.readOnlyHint is True
+                assert by_name[name].annotations.openWorldHint is True
+                assert by_name[name].annotations.destructiveHint is False
+            invalid_list = await session.call_tool('pegasus_list_games', {'page_size': 0})
+            assert invalid_list.isError
+            invalid_resolve = await session.call_tool('pegasus_resolve_game', {'game_id': 1, 'name': 'test'})
+            assert invalid_resolve.isError
             for name in ('pegasus_change_plan', 'pegasus_change_apply', 'pegasus_change_reverse_plan',
                          'pegasus_native_qa_begin', 'pegasus_native_qa_report'):
                 assert name in by_name

@@ -16,6 +16,19 @@ def register(app,bridge):
 
     from .change_plan import ChangePlanService
     from .native_qa import NativeQAService
+    from .games import GameDiscoveryService
+
+    @app.tool(annotations={**ro, 'openWorldHint':True})
+    def pegasus_list_games(query:str|None=None, offset:int=0, page_size:int=100,
+                           max_pages:int=10, match_mode:str='contains')->dict:
+        """分页遍历当前账号后台天马作品，可按名称 contains/exact 筛选；不依赖历史作品日志，不启动编辑器。每页 1–100，最多 100 页。complete 表示从头扫到末页；截断时用 next_offset 续查，restart_required 时从头重查。需有效会话。"""
+        return GameDiscoveryService(bridge).list_games(query, offset, page_size, max_pages, match_mode)
+
+    @app.tool(annotations={**ro, 'openWorldHint':True})
+    def pegasus_resolve_game(game_id:int|None=None, name:str|None=None, exact:bool=True,
+                             page_size:int=100, max_pages:int=100)->dict:
+        """通过后台列表按 ID 或名称核对作品（二选一），自动翻页；exact=false 为名称包含搜索。仅完整扫描且唯一匹配时返回 game；同名返回 ambiguous/candidates，截断返回 incomplete。not_found 只表示当前账号列表无匹配，不代表作品不存在；不自动打开或修改作品。"""
+        return GameDiscoveryService(bridge).resolve_game(game_id, name, exact, page_size, max_pages)
 
     @app.tool(annotations={**local, 'openWorldHint':True})
     def pegasus_change_plan(manifest_path:str, output_directory:str)->dict:
