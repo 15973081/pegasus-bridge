@@ -10,7 +10,7 @@ async def main():
         folder=Path(tmp)
         async with stdio_client(StdioServerParameters(command=sys.executable,args=['-m','pegasus_bridge.server'])) as (r,w):
             async with ClientSession(r,w) as s:
-                await s.initialize();tools=await s.list_tools();assert len(tools.tools)==53
+                await s.initialize();tools=await s.list_tools();assert len(tools.tools)==58
                 async def call(name,**args):
                     result=await s.call_tool('pegasus_'+name,args)
                     assert not result.isError,result.content
@@ -26,6 +26,6 @@ async def main():
                 project=await call('project_check',manifest_path=str(root/'examples/workflows/project-manifest.json'));assert project['valid']
                 packed=await call('project_pack',manifest_path=str(root/'examples/workflows/project-manifest.json'),output_path=str(folder/'game.zip'));assert packed['verified']
                 history=await call('history',backup_directory=str(folder));assert history['backups']==[]
-                print(json.dumps(dict(tool_count=53,local_mcp_workflows=True,cloud_writes=False,route_snapshots=route['snapshots']),indent=2))
+                print(json.dumps(dict(tool_count=58,local_mcp_workflows=True,cloud_writes=False,route_snapshots=route['snapshots']),indent=2))
 
 if __name__=='__main__':asyncio.run(main())

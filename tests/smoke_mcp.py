@@ -12,8 +12,16 @@ async def main():
             await session.initialize()
             tools = await session.list_tools()
             names = [tool.name for tool in tools.tools]
-            assert len(names) == 53, names
+            assert len(names) == 58, names
             by_name = {tool.name: tool for tool in tools.tools}
+            for name in ('pegasus_change_plan', 'pegasus_change_apply', 'pegasus_change_reverse_plan',
+                         'pegasus_native_qa_begin', 'pegasus_native_qa_report'):
+                assert name in by_name
+            assert by_name['pegasus_change_apply'].annotations.destructiveHint is True
+            invalid_plan = await session.call_tool('pegasus_change_apply', {'plan_path':'missing-change-plan.json'})
+            assert invalid_plan.isError
+            invalid_qa = await session.call_tool('pegasus_native_qa_begin', {'game_id':-1, 'output_directory':'unused-native-qa'})
+            assert invalid_qa.isError
             variant = by_name['pegasus_create_orientation_variant']
             assert variant.annotations.destructiveHint is False
             assert variant.annotations.readOnlyHint is False

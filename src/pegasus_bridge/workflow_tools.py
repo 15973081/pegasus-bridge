@@ -14,6 +14,34 @@ def register(app,bridge):
     edit={'readOnlyHint':False,'destructiveHint':True,'openWorldHint':True}
     author=AuthoringService(bridge);batch=BatchService(bridge)
 
+    from .change_plan import ChangePlanService
+    from .native_qa import NativeQAService
+
+    @app.tool(annotations={**local, 'openWorldHint':True})
+    def pegasus_change_plan(manifest_path:str, output_directory:str)->dict:
+        """冻结项目修改计划与差异，不写云端。输入 game_id/items；每项 kind=scene/story_tree/ui，scene_id 或 section，以及相对 path。支持剧情、故事线、五类基础 UI。"""
+        return ChangePlanService(bridge).plan(manifest_path, output_directory)
+
+    @app.tool(annotations=edit)
+    def pegasus_change_apply(plan_path:str)->dict:
+        """执行或续跑项目计划：全量检查冲突后逐项备份保存读回。结果不确定先停止，再调用时先核对实际内容。非原子事务。"""
+        return ChangePlanService(bridge).apply(plan_path)
+
+    @app.tool(annotations=local)
+    def pegasus_change_reverse_plan(plan_path:str, output_directory:str)->dict:
+        """生成反向恢复计划，不写云端；执行使用 change_apply 并核对当前版本。空故事线等不支持恢复的原始数据会拒绝生成。"""
+        return ChangePlanService(bridge).reverse_plan(plan_path, output_directory)
+
+    @app.tool(annotations={**local, 'openWorldHint':True})
+    def pegasus_native_qa_begin(game_id:int, output_directory:str)->dict:
+        """建立原生人工验收会话、后台元数据哈希与日志基线，输出观察表。不启动试玩、不自动截图。四项：立绘、音频、章节跳转、存读档。"""
+        return NativeQAService(bridge).begin(game_id, output_directory)
+
+    @app.tool(annotations={**local, 'openWorldHint':True})
+    def pegasus_native_qa_report(session_path:str, observations_path:str, output_path:str)->dict:
+        """校验人工观察表及本地证据文件，比较后台元数据并生成报告；manual_passed 仅为人工声明，自动试玩验证固定为 false。输出不得覆盖已有文件。"""
+        return NativeQAService(bridge).report(session_path, observations_path, output_path)
+
     @app.tool(annotations={**ro,'openWorldHint':True})
     def pegasus_list_drafts(game_id:int)->dict:
         """读取天马编辑器“打开/保存”窗口使用的原生命名备份列表。来源为后台已保存内容，不是玩家存档或本地剧情备份。"""

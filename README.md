@@ -4,7 +4,7 @@
 
 Pegasus Bridge 是面向 **Windows 天马工坊编辑器（PegasusEditor）** 的第三方适配工具，非官方产品。它提供终端命令 `pegasus` 和标准 stdio MCP 服务 `pegasus-mcp`，两种入口共用同一套功能，不修改编辑器安装文件。
 
-**当前版本：0.15.0 · Windows · Python 3.12+ · 53 个 MCP 工具**
+**当前版本：0.16.0 · Windows · Python 3.12+ · 58 个 MCP 工具**
 
 [快速开始](#快速开始) · [功能一览](#功能一览) · [案例与截图](#案例与截图) · [测试结果](#测试结果) · [完整文档](#完整文档)
 
@@ -46,7 +46,7 @@ uv tool install --python 3.12 ".[preview,qa]"
 pegasus doctor-mcp
 ```
 
-安装到独立用户环境，无需管理员权限。`doctor-mcp` 会实际启动 MCP 子进程，检查初始化、工具发现和状态调用；0.15.0 应返回 `tool_count: 53`。如果命令未加入 PATH，运行 `uv tool dir --bin` 查看命令目录。
+安装到独立用户环境，无需管理员权限。`doctor-mcp` 会实际启动 MCP 子进程，检查初始化、工具发现和状态调用；0.16.0 应返回 `tool_count: 58`。如果命令未加入 PATH，运行 `uv tool dir --bin` 查看命令目录。
 
 也支持本地 wheel / Windows ZIP 安装，详见 [安装与升级](docs/install.md)。目前不通过 PyPI 或插件市场分发。
 
@@ -120,6 +120,8 @@ pegasus save-draft 123456 "第一章_立绘完成" --checkpoint .\exports\draft-
 
 ## 测试结果
 
+**0.16.0，本机验证日期：2026-10-29。** 单元测试共 228 项，226 项通过，2 项因 Windows 符号链接权限跳过。新增跨资源计划、反向恢复与原生人工验收报告；本轮未进行云端写入或 Unity 原生试玩。详见 [项目修改与原生验收](docs/project-changes.md)。下面保留历史版本验收记录。
+
 **0.13.0，本机验证日期：2026-10-29。**
 
 | 验证项目 | 结果 |
@@ -171,3 +173,7 @@ uv run pegasus preview-report examples/workflows/preview.json examples/workflows
 旧 `pegasus_set_orientation` 对方向变更返回 `unsupported`，停止发送已实测无效的修改请求；
 旧检查点仍可读回核对。新建竖版不等于既有作品已转换或 UI 已适配。
 参数与验证边界见 [横竖版工程](docs/orientation.md)。
+
+## 项目修改与原生验收（0.16）
+
+新增 `change-plan`、`change-apply`、`change-reverse-plan`，把剧情、基础 UI 和故事线纳入统一的冻结计划、冲突预检、备份保存及反向恢复。另提供 `native-qa-begin`、`native-qa-report`，记录原生人工试玩观察与证据哈希；不自动启动试玩，不把进程状态当作验收通过。使用清单与限制见 [项目修改与原生验收](docs/project-changes.md)。

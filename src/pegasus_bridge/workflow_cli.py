@@ -7,10 +7,13 @@ from .drafts import DraftService
 from .validation import validate_scene
 from .project import project_check,project_pack
 from .qa import test_route,preview_report
+from .change_plan import ChangePlanService
+from .native_qa import NativeQAService
 
 COMMANDS={'authoring-init','authoring-read','character-add','character-place','build-scene','validate-scene',
           'batch-plan','batch-apply','batch-resume','history','diff','restore','upload-audio','audio-bind',
-          'test-route','preview-report','project-check','project-pack','list-drafts','save-draft'}
+          'test-route','preview-report','project-check','project-pack','list-drafts','save-draft',
+          'change-plan','change-apply','change-reverse-plan','native-qa-begin','native-qa-report'}
 
 def add_arguments(commands):
     def command(name,*positionals,**options):
@@ -25,6 +28,13 @@ def add_arguments(commands):
     command('build-scene','script_path','manifest_path','output_path',node_variable=dict(default='key'),hook_anchor=dict(default='-- PEGASUS-NODE-HOOK'))
     command('validate-scene','script_path',material_ids_file=dict())
     command('batch-plan','manifest_path','output_directory')
+    command('change-plan','manifest_path','output_directory')
+    command('change-apply','plan_path')
+    command('change-reverse-plan','plan_path','output_directory')
+    p=commands.add_parser('native-qa-begin')
+    p.add_argument('game_id',type=int)
+    p.add_argument('output_directory')
+    command('native-qa-report','session_path','observations_path','output_path')
     command('batch-apply','plan_path');command('batch-resume','plan_path')
     command('history','backup_directory',game_id=dict(type=int))
     command('diff','backup_path')
@@ -43,6 +53,11 @@ def add_arguments(commands):
 
 def run(args,bridge):
     c=args.command;a=args;author=AuthoringService(bridge);batch=BatchService(bridge)
+    if c=='change-plan':return ChangePlanService(bridge).plan(a.manifest_path,a.output_directory)
+    if c=='change-apply':return ChangePlanService(bridge).apply(a.plan_path)
+    if c=='change-reverse-plan':return ChangePlanService(bridge).reverse_plan(a.plan_path,a.output_directory)
+    if c=='native-qa-begin':return NativeQAService(bridge).begin(a.game_id,a.output_directory)
+    if c=='native-qa-report':return NativeQAService(bridge).report(a.session_path,a.observations_path,a.output_path)
     if c=='authoring-init':return author.init(a.manifest_path,a.game_id)
     if c=='authoring-read':return author.read(a.manifest_path)
     if c=='character-add':return author.character_add(a.manifest_path,a.game_id,a.character_id,a.name,read_json(a.expressions_file),a.expected_sha256)
