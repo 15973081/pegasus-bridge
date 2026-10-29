@@ -117,6 +117,8 @@ def main():
     checkpoint.add_argument('name')
     checkpoint.add_argument('--expected-sha256', required=True)
     checkpoint.add_argument('--backup-directory', required=True)
+    from .workflow_cli import add_arguments, run as run_workflow, COMMANDS
+    add_arguments(commands)
     args = parser.parse_args()
     bridge = Pegasus(args.install_dir, args.data_dir)
     try:
@@ -124,7 +126,9 @@ def main():
             from .server import create_server
             create_server(bridge).run(transport="stdio")
             return
-        if args.command == 'mcp-config':
+        if args.command in COMMANDS:
+            result = run_workflow(args, bridge)
+        elif args.command == 'mcp-config':
             from .installation import client_config
             result = client_config(args.client)
             if isinstance(result, str):
@@ -222,6 +226,8 @@ def main():
         else:
             result = getattr(bridge, args.command.replace("-", "_"))()
         print(json.dumps(result, ensure_ascii=False, indent=2))
+        if isinstance(result, dict) and any(result.get(key) is False for key in ('valid','passed','complete')):
+            raise SystemExit(1)
     except (BridgeError, OSError, ValueError) as exc:
         # Never dump raw HTTP exceptions (may contain credential-bearing URLs).
         message = str(exc) if isinstance(exc, BridgeError) else f"本地操作失败：{type(exc).__name__}"

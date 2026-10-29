@@ -5,7 +5,7 @@ param(
     [switch]$AllowLogAuth
 )
 $ErrorActionPreference = 'Stop'
-$packageVersion = '0.11.0'
+$packageVersion = '0.12.0'
 $uvCommand = Get-Command uv -ErrorAction SilentlyContinue
 if (-not $uvCommand) {
     throw 'uv is required. Install uv first: https://docs.astral.sh/uv/getting-started/installation/'
@@ -18,7 +18,7 @@ if (-not $WheelPath) {
 }
 $resolvedWheel = (Resolve-Path -LiteralPath $WheelPath).Path
 if ([IO.Path]::GetExtension($resolvedWheel) -ne '.whl') { throw 'WheelPath must point to a .whl file.' }
-$requirement = $resolvedWheel + '[preview]'
+$requirement = $resolvedWheel + '[preview,qa]'
 & $uvCommand.Source tool install --python 3.12 $requirement
 if ($LASTEXITCODE -ne 0) { throw 'Installation failed. Existing conflicting commands were not overwritten.' }
 $toolBin = (& $uvCommand.Source tool dir --bin).Trim()

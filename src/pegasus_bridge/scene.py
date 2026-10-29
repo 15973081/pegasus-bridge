@@ -36,14 +36,19 @@ class SceneService(UIService):
         self.session_resolver = session_resolver
 
     @bounded_errors
-    def apply_scene(self, game_id, scene_id, script_path, expected_sha256, backup_directory):
+    def apply_scene(self, game_id, scene_id, script_path, expected_sha256, backup_directory, allow_empty=False):
         game_id, scene_id = positive_id(game_id), positive_id(scene_id)
         path = Path(script_path).expanduser().resolve()
-        if path.suffix.lower() != '.lua' or not 0 < path.stat().st_size <= 1024 * 1024:
+        if path.suffix.lower() != '.lua' or path.stat().st_size > 1024 * 1024 or (not allow_empty and not path.stat().st_size):
             raise BridgeError('剧情必须为非空、1MB 以内的 UTF-8 Lua 文件')
         code = path.read_text(encoding='utf-8-sig')
-        if not code.strip() or not re.fullmatch(r'[a-f0-9]{64}', expected_sha256):
+        if (not allow_empty and not code.strip()) or not re.fullmatch(r'[a-f0-9]{64}', expected_sha256):
             raise BridgeError('必须提供非空剧情及读取时的 UTF-8 SHA-256')
+        if code.strip():
+            from .validation import validate_source
+            report = validate_source(code)
+            if not report['valid']:
+                raise BridgeError('保存前 Lua 校验失败：' + json.dumps(report['errors'], ensure_ascii=False))
         url = f'{BASE}/command-line/game/{game_id}/scene/{scene_id}/command'
         with self.client() as api:
             def read():
@@ -67,7 +72,8 @@ class SceneService(UIService):
             commands=[]
             if before:
                 commands.append({'index': 0, 'length': len(before.encode('utf-16-le')) // 2, 'type': 'DELETE', 'content': None})
-            commands.append({'index': 0, 'length': 0, 'type': 'INSERT', 'content': code})
+            if code:
+                commands.append({'index': 0, 'length': 0, 'type': 'INSERT', 'content': code})
             self.data(api.put(url, json={
                 'sId': session, 'token': token, 'serialNum': 1, 'errorStatus': 1,
                 'stats': {'source': 3, 'codeNumDelta': 0, 'contentNumDelta': 0},

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "initial": {"text": {"title": "调查开始"}},
+  "steps": [
+    {"click": "next", "expect": {"text": {"title": "调查完成"}}},
+    {"click": "next", "expect": {"text": {"title": "调查开始"}}}
+  ]
+}

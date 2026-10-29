@@ -2,14 +2,18 @@
 
 Windows 天马编辑器（默认 `C:\APP\PegasusEditor`）的非官方基础适配工具。Python 3.12+，使用 uv 安装锁定依赖。不会修改编辑器安装文件，仓库不包含编辑器二进制、登录凭据或作品数据。
 
-这是可安装的 **标准 stdio MCP Server**，不是仅在 CLI 中模拟工具调用。`pegasus-mcp` 供 MCP 客户端启动，`pegasus` 供终端使用；目前有 30 个 MCP 工具。0.11.0 提供 Windows 安装 ZIP、独立安装自检和客户端配置生成。完整说明见 [安装与接入](docs/install.md)。当前发行物为本地 wheel/ZIP 和源码，尚未发布到 PyPI 或插件市场。
+这是可安装的 **标准 stdio MCP Server**，不是仅在 CLI 中模拟工具调用。`pegasus-mcp` 供 MCP 客户端启动，`pegasus` 供终端使用；目前有 48 个 MCP 工具。0.12.0 集成角色与音频配置、保存前校验、批量计划与续跑、备份恢复、自动试玩报告和工程打包，同时提供 Windows 安装 ZIP、独立安装自检和客户端配置生成。完整说明见 [安装与接入](docs/install.md)。当前发行物为本地 wheel/ZIP 和源码，尚未发布到 PyPI 或插件市场。
 
 ```powershell
-# 在已下载的源码目录中安装为独立用户级工具（含浏览器预览依赖）
-uv tool install --python 3.12 ".[preview]"
+# 在已下载的源码目录中安装为独立用户级工具（含预览与报告依赖）
+uv tool install --python 3.12 ".[preview,qa]"
 pegasus doctor-mcp
 pegasus mcp-config --client codex
 ```
+
+## 集成创作工作流
+
+七类新增能力同时通过 MCP 和 CLI 提供，完整参数、清单格式与限制见 [创作工作流](docs/workflows.md)。角色管理使用显式节点钩子生成 Lua；图片生成不属于本工具。批量部署可核对后续跑，但不是后台事务；测试报告是 Lua/浏览器近似验证。
 
 ## 当前能力与验证范围
 
@@ -46,7 +50,7 @@ pegasus mcp-config --client codex
 | 商品列表读取、导出 | `read goods` / `export goods` | `pegasus_read` / `pegasus_export` | 在线读取实测 |
 | 已有商品数据编辑 | `apply-goods` | `pegasus_apply_goods` | 模拟接口测试；尚未实际修改线上商品 |
 
-**限制：** 在线操作使用 `TOKEN` Cookie 与 CSRF 查询参数，写入成功业务码必须为 `200000`。会话过期可能返回 `502001`。0.11.0 支持作品状态、主动上报的玩家/背包观察、本地原生存档，以及图片、UI、剧情、章节、故事线、商城编辑与设计生成，并提供独立 Lua 近似预览；不支持发布、原生试玩控制或 Unity 内部对象读写。`catalog` 是指令分类缓存，不是场景剧情内容。`recent-games` 是历史记录，不是账号全部作品。响应保留后台结构，`scenes` 的 data、UI 分类中的 command 和 `ui_template` 中的 template 可能是 JSON 字符串，需要再次解析。
+**限制：** 在线操作使用 `TOKEN` Cookie 与 CSRF 查询参数，写入成功业务码必须为 `200000`。会话过期可能返回 `502001`。0.12.0 支持作品状态、主动上报的玩家/背包观察、本地原生存档，以及图片、UI、剧情、章节、故事线、商城编辑与设计生成，并提供独立 Lua 近似预览；不支持发布、原生试玩控制或 Unity 内部对象读写。`catalog` 是指令分类缓存，不是场景剧情内容。`recent-games` 是历史记录，不是账号全部作品。响应保留后台结构，`scenes` 的 data、UI 分类中的 command 和 `ui_template` 中的 template 可能是 JSON 字符串，需要再次解析。
 
 
 ## 使用
@@ -295,9 +299,9 @@ $expectedUiHash = (Get-Content '.\exports\playback.sha256' -Raw).Trim()
 .\pegasus.cmd apply-scene 123456 987654 '.\scene.lua' --expected-sha256 $expectedSceneHash --backup-directory '.\exports\scene-backups'
 ```
 
-先用 `read commands` 读取源代码并计算哈希。更新会保留旧代码和目标代码、重新检查版本、按 UTF-16 长度替换指令流，并读回核验；不会发布作品。编辑器须已打开目标作品，以便读取本地编辑会话。备份失败、版本冲突均拒绝写入；读回不一致不自动重试或回滚。与 UI 更新相同，后台没有原子 CAS，请避免同时编辑保存。
+先用 `read commands` 读取源代码并计算哈希。更新会保留旧代码和目标代码、重新检查版本、按 UTF-16 长度替换指令流，并读回核验；不会发布作品。本机需保留此前打开作品建立的编辑会话，不要求编辑器窗口持续运行。备份失败、版本冲突均拒绝写入；读回不一致不自动重试或回滚。与 UI 更新相同，后台没有原子 CAS，请避免同时编辑保存。
 
-**保存成功不代表运行验证成功。** 编辑器可能继续使用内存里的旧剧情，写入后应退出作品并重新打开，再进行运行验证。工具不验证 Lua 语法或天马指令兼容性。
+**保存成功不代表运行验证成功。** 编辑器可能继续使用内存里的旧剧情，写入后应退出作品并重新打开，再进行运行验证。工具会检查 Lua 语法及已知不兼容模式，但不能保证所有天马指令的原生运行行为。
 
 ## 章节与原生故事线（0.4.0）
 

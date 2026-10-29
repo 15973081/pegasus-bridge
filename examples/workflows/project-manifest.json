@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "title": "创作工作流本地示例（非线上作品）",
+  "game_id": 123456,
+  "scenes": [{"scene_id": 987654, "script": "source.lua"}],
+  "assets": {},
+  "variables": {},
+  "supporting_files": ["preview.json", "route.json"]
+}

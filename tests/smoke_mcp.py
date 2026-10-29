@@ -12,7 +12,7 @@ async def main():
             await session.initialize()
             tools = await session.list_tools()
             names = [tool.name for tool in tools.tools]
-            assert len(names) == 30, names
+            assert len(names) == 48, names
             by_name = {tool.name: tool for tool in tools.tools}
             assert by_name['pegasus_preview_state'].annotations.readOnlyHint is True
             assert by_name['pegasus_preview_reset'].annotations.destructiveHint is True

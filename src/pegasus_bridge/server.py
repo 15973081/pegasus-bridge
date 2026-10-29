@@ -177,6 +177,8 @@ def create_server(bridge: Pegasus | None = None):
         """经授权修改已存在商品的 name、price、payType。保留商品绑定和权益，备份、并发检查、读回；哈希为 goods 列表中该完整商品对象的 digest。价格单位沿用后台。说明在商品详情 UI 中编辑，不下单、不创建商品或发布作品。"""
         return GoodsService(bridge).apply(game_id,goods_id,changes,expected_sha256,backup_directory)
 
+    from .workflow_tools import register
+    register(app, bridge)
     return app
 
 
