@@ -45,7 +45,8 @@ class ChangePlanService:
     def remote(self, gid, item):
         kind, key = self.identity(item)
         resource = {'scene': 'commands', 'story_tree': 'story_tree', 'ui': 'ui_template'}[kind]
-        value = self.bridge.read(resource, gid, key if kind != 'ui' else None)['response']['data']
+        options={'_raw_source':True} if kind=='scene' else {}
+        value = self.bridge.read(resource, gid, key if kind != 'ui' else None,**options)['response']['data']
         if kind == 'scene':
             return value['command'] if value['command'] is not None else ''
         if kind == 'ui':

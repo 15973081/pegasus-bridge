@@ -76,7 +76,7 @@ class EditorTests(unittest.TestCase):
             result = self.service.open_game(42, 0)
             read.assert_called_once_with('game', 42)
             argv = popen.call_args.args[0]
-            self.assertEqual(argv[1], 'pegasus-editor://open?gameId=42&uid=private-uid')
+            self.assertEqual(argv[1], 'pegasus-editor://open?gameId=42&sdkuid=private-uid')
             self.assertNotIn('shell', popen.call_args.kwargs)
             self.assertNotIn('private-uid', json.dumps(result))
             self.assertEqual(result['progress'], 'sent_unconfirmed')
@@ -139,6 +139,16 @@ class EditorTests(unittest.TestCase):
                 with self.assertRaises(BridgeError):
                     self.service.open_game(gid, wait)
             popen.assert_not_called()
+
+    def test_integrity_mismatch_stops_before_native_launch_or_identity_read(self):
+        (self.root/'PegasusEditorLauncher.exe').touch()
+        status={'current_process_security':{'integrity_rid':8192,'integrity_name':'medium'},
+                'processes':[{'pid':777,'executable':'Release_Windows_Tianma.exe','security':{'integrity_rid':12288,'integrity_name':'high'}}]}
+        with patch.object(self.bridge,'read'),patch.object(self.bridge,'status',return_value=status),patch('pegasus_bridge.editor.local_sdk_uid') as identity,patch('pegasus_bridge.editor.subprocess.Popen') as launch:
+            result=self.service.open_game(42,0)
+        self.assertFalse(result['request_sent'])
+        self.assertEqual(result['progress'],'integrity_mismatch')
+        identity.assert_not_called();launch.assert_not_called()
 
     def test_saved_state_partial_failure_and_scope(self):
         def read(resource, gid, sid):

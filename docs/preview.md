@@ -1,4 +1,4 @@
-# 同源 Lua 交互预览（0.10.0）
+# 同源 Lua 交互预览（0.17.1+local.26）
 
 这是独立的本地预览服务：Python/Lupa 执行提供的 Lua 脚本，适配层收集控件和点击回调，浏览器使用 HTML/CSS 绘制。它不调用天马 Unity 窗口，也不是官方 Web 导出。
 
@@ -37,7 +37,9 @@ pegasus preview-stop <session_id>
   "width": 1920,
   "height": 1080,
   "variables": {"checkpoint": "", "has_key": false},
-  "assets": {"$background": "assets/ward.png", "$hum": "assets/hum.ogg"}
+  "assets": {"$background": "assets/ward.png", "$hum": "assets/hum.ogg"},
+  "video_assets": {"$clip": "assets/clip.mp4"},
+  "instruction_limit": 5000000
 }
 ```
 
@@ -45,13 +47,19 @@ pegasus preview-stop <session_id>
 
 支持 PNG/JPEG/WebP/GIF、MP3/WAV/OGG，不提供任意本地文件或外部 URL 读取。脚本最大 2 MiB，单个素材最大 32 MiB，总素材最大 128 MiB。启动时冻结脚本、初始变量与素材；reset 不会热加载改动，修改后需要重新启动会话。
 
+`video_assets`另列最多1000段、单段512MiB以内的本地MP4。视频通过本机Range请求流式读取，不一次装入内存；文件大小、修改时间或文件身份变化时拒绝继续读取，需重启预览。浏览器还需实际支持视频编码。视频默认静音自动播放，点击“启用声音 / 播放”开启声音。`instruction_limit`默认500万条，可为大型JSON数据脚本显式配置10万至2亿条，Lua内存上限仍为64MiB。
+
 ## 当前适配范围
 
 - `ac.createLayer/createImage/createText/createButton/createStyle`：记录具名控件，同名创建覆盖旧配置。
 - 控件 `pos={x,y}` 为父图层内左下原点坐标；`size={w,h}`、百分比 `anchor={x,y}`、`inlayer`、`index`、`visible`、`opacity` 支持网页近似布局。
-- 文字支持 `content/text_style/font_size/alignment`、样式 `color/bold`，字体采用浏览器中文字体，不复刻 Unity SDF。
-- 按钮支持 `click_func`、`normal_resId/hover_resId`；无图片时使用简单文字按钮。父图层隐藏的按钮无法点击。
+- 文字支持 `content/font_size/alignment`、`textStyle/text_style/TextStyle` 命名样式和样式 `color/bold`。直接传入可用的颜色字符串时优先于样式颜色；空值或不支持的值回退到样式。原生运行建议显式使用 `#RRGGBB`：原生 RGB 数组属于后备路径，已有样式颜色时可能被忽略。字体采用浏览器中文字体，不复刻 Unity SDF，浏览器 CSS 颜色支持范围也不代表 Unity 接受范围。
+- 文字内容中的基础 TMP 标记 `<b>/<i>/<u>/<s>` 支持嵌套预览；仅识别这些无属性标记，其余标记保留为可见原文，不作为网页 HTML 执行。不保证其他 TMP 标记、错误嵌套、字体字形或行框与 Unity 一致。
+- 按钮支持 `click_func`、`normal_resId/hover_resId`。可用 `btn_text` 在底图上显示文字，并用 `color`、`font_size` 覆盖命名样式。显式传入空文字可只显示底图。父图层隐藏的按钮无法点击。
 - `ac.createAudio/stopAudio` 收集音频请求，浏览器点击后尝试播放；不保证与天马音频时序一致，也不提供同名短音效重复触发的完整事件模拟。
+- `ac.showVideo/closeVideo/pauseVideo/resumeVideo`使用HTML5视频；`events[{time,action,func}]`支持秒数、`next/freeze`。Lua等待真实浏览器结束事件后继续，旧视频代次事件会被忽略。时间回调依赖浏览器事件频率，不保证Unity逐帧精度。`ac.remove`移除控件和子控件。
+- 标准Lua表元方法可用；不能据此访问Python、文件、网络或动态加载接口。
+- `CltTimer.SetTimeout(callback,delay)`和`ClearTimer(handle)`使用预览服务的单调时钟，delay单位为秒，一次触发，可取消；视频暂停时仍计时。`ac.waitForSeconds({delay=...})`挂起并恢复当前Lua协程。回调创建的零延迟任务在下一调度轮执行；同时最多1000个任务，异常与超限会显示为预览错误。网页轮询状态，使延迟生成的选项在视频暂停或结束后仍可显示。
 - `ac.var` 使用配置提供的会话初值；`print` 保留最多 50 条日志（每条上限 4096 字符），不写天马日志。
 - `ac.showUI` 只记录原生界面请求并显示提示，不执行其界面或 `close_cb`。无法验证原生存读档、商品购买、支付或解锁流程。
 

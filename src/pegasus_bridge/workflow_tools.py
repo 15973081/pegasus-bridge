@@ -127,7 +127,7 @@ def register(app,bridge):
 
     @app.tool(annotations={**local,'openWorldHint':True})
     def pegasus_upload_audio(game_id:int,audio_path:str,alias:str,checkpoint:str)->dict:
-        """上传 32 MiB 以内 PCM WAV 到作品音频素材库，检查格式/时长并记录断点。注册结果不确定时拒绝自动重复注册；不生成配音。"""
+        """上传 32 MiB 以内 PCM WAV 或 MP3 到作品音频素材库，检查真实格式/时长并记录断点；MP3需ffprobe。注册结果不确定时拒绝自动重复注册；不生成配音。"""
         return AudioService(bridge).upload_audio(game_id,audio_path,alias,checkpoint)
 
     @app.tool(annotations={**local,'destructiveHint':True})

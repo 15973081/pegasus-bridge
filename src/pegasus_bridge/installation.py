@@ -42,7 +42,7 @@ async def _probe():
                 init = await session.initialize()
                 result = await session.list_tools()
                 names = sorted(tool.name for tool in result.tools)
-                required = {'pegasus_status', 'pegasus_apply_scene', 'pegasus_preview_start',
+                required = {'pegasus_status', 'pegasus_apply_scene', 'pegasus_preview_start', 'pegasus_preview_key', 'pegasus_preview_input',
                             'pegasus_character_add', 'pegasus_batch_resume', 'pegasus_project_pack',
                             'pegasus_upload_audio', 'pegasus_validate_scene', 'pegasus_preview_report',
                             'pegasus_list_drafts', 'pegasus_save_draft', 'pegasus_list_games', 'pegasus_resolve_game',

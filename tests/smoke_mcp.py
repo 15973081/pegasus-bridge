@@ -1,18 +1,20 @@
 """Real stdio client/server handshake; no remote requests or app launch."""
 import asyncio
 import json
+from pathlib import Path
 import sys
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 
 async def main():
-    async with stdio_client(StdioServerParameters(command=sys.executable, args=["-m", "pegasus_bridge.server"])) as (read, write):
+    async with stdio_client(StdioServerParameters(command=sys.executable, args=["-m", "pegasus_bridge.server"],
+                                                env={'PYTHONPATH':str(Path(__file__).resolve().parents[1]/'src')})) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
             tools = await session.list_tools()
             names = [tool.name for tool in tools.tools]
-            assert len(names) == 60, names
+            assert len(names) == 68, names
             by_name = {tool.name: tool for tool in tools.tools}
             for name in ('pegasus_list_games', 'pegasus_resolve_game'):
                 assert by_name[name].annotations.readOnlyHint is True
@@ -58,6 +60,18 @@ async def main():
             assert by_name['pegasus_save_draft'].annotations.openWorldHint is True
             assert set(by_name['pegasus_save_draft'].inputSchema['required']) == {'game_id', 'name', 'checkpoint'}
             assert by_name['pegasus_preview_state'].annotations.readOnlyHint is True
+            keyboard = by_name['pegasus_preview_key']
+            assert keyboard.annotations.readOnlyHint is False
+            assert keyboard.annotations.openWorldHint is False
+            assert set(keyboard.inputSchema['required']) == {'session_id', 'key', 'expected_revision'}
+            assert keyboard.inputSchema['properties']['repeat']['default'] is False
+            assert set(keyboard.inputSchema['properties']['key']['enum']) == {'ArrowUp', 'ArrowDown', 'Enter', 'Escape', ' ', '1', '2', '3', '4', '5'}
+            raw=by_name['pegasus_preview_input']
+            assert raw.annotations.openWorldHint is False and raw.annotations.readOnlyHint is False
+            assert set(raw.inputSchema['required'])=={'session_id','event','expected_revision'}
+            assert raw.inputSchema['properties']['event']['discriminator']['propertyName']=='kind'
+            assert len(raw.inputSchema['properties']['event']['oneOf'])==4
+            assert all(v['additionalProperties'] is False for k,v in raw.inputSchema['$defs'].items() if k.startswith('_Preview'))
             assert by_name['pegasus_preview_reset'].annotations.destructiveHint is True
             for name in ('pegasus_preview_state', 'pegasus_preview_stop'):
                 invalid = await session.call_tool(name, {'session_id': '../invalid'})

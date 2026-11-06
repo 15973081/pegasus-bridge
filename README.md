@@ -1,10 +1,36 @@
 # Pegasus Bridge · 天马工坊编辑器第三方工具
 
+本地修复 `.23`：本地 Lua 预览适配固定内容的竖向 `createScrollView`、完整图片子节点和原生 DOM 裁剪／滚动。新增按对象代际校验的实际滚动位置与尺寸回报，以及限定宽度／RGBA 的滚动条样式；配置不冒充实际回报，同名替换不接收旧报告或移除新对象。395项检查通过，含真实滚轮与滚动条拖拽。无天马二进制修改，不代表 Unity 裁剪或实体输入已验证。
+
 **通过 CLI 和 MCP 读取、编辑、预览和检查天马作品，让重复的创作操作可以由脚本或 AI 助手完成。**
 
 Pegasus Bridge 是面向 **Windows 天马工坊编辑器（PegasusEditor）** 的第三方适配工具，非官方产品。它提供终端命令 `pegasus` 和标准 stdio MCP 服务 `pegasus-mcp`，两种入口共用同一套功能，不修改编辑器安装文件。
 
-**当前版本：0.17.0 · Windows · Python 3.12+ · 60 个 MCP 工具**
+**优化分支版本：0.17.1+local.26 · Windows · Python 3.12+ · 68 个 MCP 工具**
+
+本地修复 `.26`：Lua 浏览器预览中的按钮可以同时显示底图和文字，直接传入的文字颜色和字号优先于命名样式。只改变视觉属性时保留按钮和标签节点；显式空文字可继续用于文字已绘制在底图上的按钮。
+
+本地修复 `.22`：按键排在真实鼠标输入回报之后时，只在捕获的输入所有者代际仍相同的条件下刷新 revision 后提交；代际变化则丢弃，不重放到新 modal。后端原有精确 revision 拒绝规则保留。388项测试通过，含14项真实 DOM 测试；新增相同 owner 排队按键回归在 `.21` 上失败，在 `.22` 上通过，替换 owner 的旧按键仍不会触发新回调。
+
+本地修复 `.21`：`lazy_assets=true` 显式按需流式读取图片／音频，最多1024MiB静态文件预算；默认内存模式及其512MiB上限保留。白名单路径、32MiB单文件上限、同源能力地址、文件身份检查、单段Range与256KiB流块继续有效。386项测试通过，包括不预读素材、路径/数量/容量拒绝、图片/音频实际HTTP字节与文件变更拒绝。此方式不修改任何素材、缓存、审核或云端访问。
+
+本地修复 `.20`：增加真实鼠标／笔悬停坐标（不合成 touch hover）、只读 UI 对象存在查询、独立的视频倍速请求及实际 HTMLVideoElement 回报。支持显式解压单块1..8MiB（默认2MiB），累计8MiB、64次编译、入口2MiB和指令／沙箱限制保留。383项测试通过，含12项真实 DOM 检查与媒体暂停／继续／倍速回读。对象存在或浏览器媒体状态均不证明原生画面、硬件声音或云端存档。
+
+本地修复 `.19`：实际点击游戏画面（含视频）后恢复画布键盘焦点；重置后即使尺寸不变也重新报告真实 viewport。378 项测试通过，含11项真实 Chromium DOM 测试；新增两项回归在 `.18` 上均失败，在 `.19` 上通过。工具栏输入过滤、所有者代际、媒体报告校验及沙箱限制保留。旧预览需创建新会话才能载入新前端。
+
+本地修复 `.18`：补齐受沙箱约束的标准 Lua rawget/rawset/rawequal，支持保留按钮时使用的回调代理。`.17` 按控件代际增量更新 DOM，保留按钮、图片子节点及焦点并拒绝旧所有者的排队点击。376 项测试通过，含9项真实 Chromium DOM 测试和实际媒体暂停/继续检查。显式解压预算、输入及媒体报告的沙箱和总量限制保留；68工具及schema未变。浏览器验证仍不代表 Unity 原生效果。
+
+本地 .4 版修正原生打开协议参数为 `sdkuid`（原生解析器不接受 `uid`）；`status` 增加进程完整性级别诊断，`open_game` 在编辑器权限高于MCP时返回 `integrity_mismatch`，避免重复发起必然受限的热打开请求。不会自动提权或关闭应用。
+
+`pegasus_cache_materials` 补齐客户端原生导入时的本机缓存步骤：先核对自有素材目录的ID、URL、字节数及本地SHA，再备份缓存冲突并原子复制；原文件保留。该缓存只供本机编辑器使用，不改变云端素材访问或审核状态。
+
+本地 .3 版修复天马原生素材上传的渠道认证：图片、音频、视频统一从 `tianma-server-api` 获取限定上传令牌，门户编辑接口继续使用独立的门户会话，不在配额拒绝时自动换渠道。新增 `pegasus_video_upload_status` 区分上传通道响应和固定素材域的匿名访问状态；传入素材 URL 时不申请上传令牌。新增 `pegasus_native_config_status` 检查原生 config 端点的后台接受状态，场景配置下载成功不等于主配置审查通过，也不等于 Unity 已实际执行。所有返回均隐藏凭据与配置正文。
+
+本地修复版基于上游 0.17.0，修复未首次保存时缺少客户端协作 SID 导致的误拒绝，以及进程诊断不必要地要求读取进程内存的问题。SID 仅为客户端协作标识，认证、服务端脚本令牌、版本检查、备份和读回校验仍保持有效。
+
+本地 .2 版新增 `pegasus_upload_video` 和 `pegasus_video_catalog`，使用已观察的原生视频素材协议，支持 H.264 MP4、封面上传、分页目录读取及持久化注册检查点；需本机 ffmpeg/ffprobe。
+
+本地 .2 版同时支持验证真实编码的 MP3 音频。剧情读取返回精确 `source_sha256` 及 `source_redacted`，展示文本发生脱敏时应使用前者检查版本；内部批量计划保留完整原源码，防止普通 `token` 变量被误脱敏后破坏备份或形成虚假冲突。视频名称中的英文句号在上传前拒绝；上传服务拒绝信息保留经过脱敏的业务提示。
 
 [快速开始](#快速开始) · [功能一览](#功能一览) · [案例与截图](#案例与截图) · [测试结果](#测试结果) · [完整文档](#完整文档)
 
@@ -41,13 +67,13 @@ Pegasus Bridge 是面向 **Windows 天马工坊编辑器（PegasusEditor）** �
 先安装 [uv](https://docs.astral.sh/uv/getting-started/installation/) 和 Git，在 PowerShell 中执行：
 
 ```powershell
-git clone https://github.com/15973081/pegasus-bridge.git
+git clone --branch optimization/local-0.17.1-26 https://github.com/15973081/pegasus-bridge.git
 cd pegasus-bridge
 uv tool install --python 3.12 ".[preview,qa]"
 pegasus doctor-mcp
 ```
 
-安装到独立用户环境，无需管理员权限。`doctor-mcp` 会实际启动 MCP 子进程，检查初始化、工具发现和状态调用；0.17.0 应返回 `tool_count: 60`。如果命令未加入 PATH，运行 `uv tool dir --bin` 查看命令目录。
+安装到独立用户环境，无需管理员权限。`doctor-mcp` 会实际启动 MCP 子进程，检查初始化、工具发现和状态调用。此分支应返回版本 `0.17.1+local.26` 和 `tool_count: 68`。如果命令未加入 PATH，运行 `uv tool dir --bin` 查看命令目录。
 
 也支持本地 wheel / Windows ZIP 安装，详见 [安装与升级](docs/install.md)。目前不通过 PyPI 或插件市场分发。
 
@@ -75,7 +101,7 @@ pegasus mcp-config --client json
 
 ### 4. 连接自己的天马作品
 
-在线读取和保存需要有效登录；编辑操作还需要本机已有对应作品的编辑会话。先在天马客户端登录并打开作品，再为 CLI 或 MCP 服务配置认证。
+在线读取和保存需要有效登录。客户端协作 SID 优先取自编辑器缓存；未生成时由桥接器独立持久化。先在天马客户端登录，再为 CLI 或 MCP 服务配置认证。
 
 ```powershell
 # 显式允许 CLI 使用本机天马日志中已有的登录会话
@@ -121,6 +147,8 @@ pegasus save-draft 123456 "第一章_立绘完成" --checkpoint .\exports\draft-
 
 ## 测试结果
 
+**0.17.1+local.26。** 本机通过实际 stdio 会话核验 68 个 MCP 工具。浏览器回归覆盖视频续播、真实鼠标和键盘输入，以及带底图的按钮文字与点击。
+
 **0.17.0，本机验证日期：2026-10-29。** 共 248 项单元测试，246 项通过、2 项因 Windows 符号链接权限跳过。真实 stdio MCP 发现 60 个工具；以每页 2 个作品遍历 3 页，核对当前账号 5 个作品，名称和 ID 均定位到测试作品 2452144。多候选、截断和无匹配返回状态均通过实测。详见 [后台作品查找](docs/game-discovery.md)。
 
 **0.16.0，本机验证日期：2026-10-29。** 单元测试共 228 项，226 项通过，2 项因 Windows 符号链接权限跳过。新增跨资源计划、反向恢复与原生人工验收报告；本轮未进行云端写入或 Unity 原生试玩。详见 [项目修改与原生验收](docs/project-changes.md)。下面保留历史版本验收记录。
@@ -140,6 +168,7 @@ pegasus save-draft 123456 "第一章_立绘完成" --checkpoint .\exports\draft-
 
 ```powershell
 uv sync --locked --extra preview --extra qa
+$env:B13_DOM_SMOKE = '1'
 uv run python -m unittest discover -s tests
 uv run python tests/smoke_mcp.py
 uv run python tests/smoke_workflows.py
@@ -181,3 +210,13 @@ uv run pegasus preview-report examples/workflows/preview.json examples/workflows
 ## 项目修改与原生验收（0.16）
 
 新增 `change-plan`、`change-apply`、`change-reverse-plan`，把剧情、基础 UI 和故事线纳入统一的冻结计划、冲突预检、备份保存及反向恢复。另提供 `native-qa-begin`、`native-qa-report`，记录原生人工试玩观察与证据哈希；不自动启动试玩，不把进程状态当作验收通过。使用清单与限制见 [项目修改与原生验收](docs/project-changes.md)。
+
+本地 .7：图片导入采用进程锁、原子检查点和注册不确定保护；校验完整 PNG，增加图片分类读取工具。
+
+本地 .8：验证 PNG 压缩像素可解码，拒绝异常已登记图片检查点 URL，上传限频返回 Retry-After 秒数，补齐图片分类能力报告。
+
+本地 .9：原生配置诊断可核对动态素材 ID 是否进入编译资源表，仅返回计数和缺失 ID，不导出素材 URL 或配置正文。
+
+本地 .10：本地 Lua 预览可显式启用 allow_text_load；仅加载文本，固定沙箱环境并保持内存、指令和编译额度限制，默认关闭。
+
+本地 .11：修复脱敏正则在长连续源码上的二次回溯；日志工具整行省略超长记录，保留其后的运行诊断。

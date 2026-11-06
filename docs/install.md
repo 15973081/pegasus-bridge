@@ -10,7 +10,7 @@
 
 ## Windows 安装包
 
-先安装 [uv](https://docs.astral.sh/uv/getting-started/installation/)。解压 `pegasus-mcp-0.15.0-windows.zip` 后，在该目录的 PowerShell 执行：
+先安装 [uv](https://docs.astral.sh/uv/getting-started/installation/)。使用文末命令构建并解压 Windows ZIP 后，在解压目录的 PowerShell 执行：
 
 ```powershell
 .\install.ps1
@@ -21,7 +21,7 @@
 如本机策略不允许运行脚本，可直接执行同等安装命令，而无需修改策略：
 
 ```powershell
-uv tool install --python 3.12 ".\pegasus_bridge-0.15.0-py3-none-any.whl[preview,qa]"
+uv tool install --python 3.12 ".\pegasus_bridge-0.17.1+local.26-py3-none-any.whl[preview,qa]"
 ```
 
 如果命令目录尚未在 PATH 中，安装器会打印完整路径。可运行 `uv tool dir --bin` 查看该目录，再从完整路径执行命令。
@@ -29,7 +29,7 @@ uv tool install --python 3.12 ".\pegasus_bridge-0.15.0-py3-none-any.whl[preview,
 ## 从源码安装
 
 ```powershell
-git clone https://github.com/15973081/pegasus-bridge.git
+git clone --branch optimization/local-0.17.1-26 https://github.com/15973081/pegasus-bridge.git
 cd pegasus-bridge
 uv tool install --python 3.12 ".[preview,qa]"
 ```
@@ -82,6 +82,10 @@ pegasus mcp-config --client json
 离线预览、安装自检和本地诊断不需要天马会话。在线读取或编辑作品需要有效认证。生成的公开配置默认 `PEGASUS_ALLOW_LOG_AUTH=0`，不包含 TOKEN/Cookie。
 
 若明确使用自己这台电脑已登录的天马会话，可在本机配置中启用 `PEGASUS_ALLOW_LOG_AUTH=1`；新注册时也可用 `install.ps1 -RegisterCodex -AllowLogAuth`。不会向安装包写入会话凭据。其他认证方式见仓库中的 `docs/reference.md`（在线操作的认证配置）。
+
+非默认安装目录应显式设置 `PEGASUS_INSTALL_DIR`，例如 `D:\app\PegasusEditor`。`pegasus status` 的 `bridge_version` 可用于确认客户端已重新连接到本地修复版。
+
+本地 0.17.1+local.1 修复版可在编辑器尚未生成缓存 SID 时，持久化自己的客户端协作标识到 `%LOCALAPPDATA%\PegasusBridge\client-sessions`。这不是登录凭据，也不代替服务端脚本令牌或协作锁检查；服务端拒绝仍会停止操作。打开作品不一定生成 SID，不能把缺少缓存当作作品未打开的证明。
 
 ## 升级与卸载
 

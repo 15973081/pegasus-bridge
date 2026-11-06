@@ -9,13 +9,13 @@ import sys
 import threading
 import time
 from functools import wraps
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
 import httpx
 
 from .core import BridgeError
-from .preview_runtime import PreviewGame, load_bundle
+from .preview_runtime import PreviewGame, PreviewFile, PreviewVideo, load_bundle
 
 
 def local_errors(fn):
@@ -28,6 +28,10 @@ def local_errors(fn):
         except (OSError, ValueError, TypeError, httpx.HTTPError):
             raise BridgeError('本地预览不可用；请检查配置、依赖和会话是否仍在运行') from None
     return wrapped
+
+
+def frontend_html():
+    return Path(__file__).with_name('preview.html').read_bytes()
 
 
 class PreviewService:
@@ -120,6 +124,15 @@ class PreviewService:
         return self._request(session_id, 'click', {'name': name, 'revision': expected_revision})
 
     @local_errors
+    def key(self, session_id, key, expected_revision, repeat=False):
+        return self._request(session_id, 'key', {'key': key, 'repeat': repeat,
+                                               'revision': expected_revision})
+
+    @local_errors
+    def input(self, session_id, event, expected_revision):
+        return self._request(session_id, 'input', {'event': event, 'revision': expected_revision})
+
+    @local_errors
     def reset(self, session_id, expected_revision):
         return self._request(session_id, 'reset', {'revision': expected_revision})
 
@@ -128,13 +141,17 @@ class PreviewService:
         return self._request(session_id, 'stop', {})
 
 
-class PreviewHTTP(HTTPServer):
+class PreviewHTTP(ThreadingHTTPServer):
     allow_reuse_address = False
+    daemon_threads = True
 
     def __init__(self, bundle):
         self.bundle = bundle
+        self.game_lock = threading.RLock()
         self.game = PreviewGame(bundle)
         self.game.snapshot()  # Fail malformed controls before returning a ready URL.
+        # A package upgrade must not pair new JavaScript with an old live runtime.
+        self.frontend = frontend_html()
         self.stopping = False
         self.token = secrets.token_hex(24)
         self.prefix = '/' + self.token + '/'
@@ -142,12 +159,17 @@ class PreviewHTTP(HTTPServer):
         self.media = {str(i): value for i, value in enumerate(bundle['media'].values())}
         self.resources = {key: 'media/' + str(i) for i, key in enumerate(bundle['media'])}
         super().__init__(('127.0.0.1', 0), PreviewHandler)
-        self.timeout = .5
+        self.timeout = .02
 
     def get_request(self):
         sock, address = super().get_request()
         sock.settimeout(3)
         return sock, address
+
+    def server_close(self):
+        with self.game_lock:
+            self.game.close()
+        super().server_close()
 
 
 class PreviewHandler(BaseHTTPRequestHandler):
@@ -189,20 +211,69 @@ class PreviewHandler(BaseHTTPRequestHandler):
             return
         try:
             if route == '':
-                self.send(200, Path(__file__).with_name('preview.html').read_bytes(), 'text/html; charset=utf-8')
+                self.send(200, self.server.frontend, 'text/html; charset=utf-8')
             elif route == 'resources.json':
                 self.send(200, self.server.resources)
             elif route == 'state':
-                self.send(200, self.server.game.snapshot())
+                with self.server.game_lock:
+                    snapshot=self.server.game.snapshot()
+                self.send(200,snapshot)
             elif route.startswith('media/') and route[6:] in self.server.media:
                 content, mime = self.server.media[route[6:]]
-                self.send(200, content, mime)
+                if isinstance(content,PreviewFile):
+                    self.video(content,mime)
+                else:
+                    self.send(200, content, mime)
             else:
                 self.send(404, {'error': '预览资源不存在'})
         except (BridgeError, ValueError, MemoryError):
             self.send(400, {'error': '预览状态无法序列化，请重置会话'})
+        except OSError:
+            self.send(409,{'error':'预览素材已改变或无法读取，请重启预览'})
+
+    def video(self,content,mime):
+        if not content.unchanged():
+            self.send(409,{'error':'预览素材文件已改变，请重启预览'})
+            return
+        start,end=0,content.size-1
+        request_range=self.headers.get('Range')
+        if request_range:
+            match=re.fullmatch(r'bytes=(\d*)-(\d*)',request_range)
+            if not match or not any(match.groups()):
+                self.send(416,{'error':'仅支持单段素材Range'})
+                return
+            first,last=match.groups()
+            if first:
+                start=int(first);end=min(int(last),end) if last else end
+            else:
+                start=max(0,content.size-int(last))
+            if start>end or start>=content.size:
+                self.send_response(416);self.send_header('Content-Range',f'bytes */{content.size}');self.end_headers();return
+        with content.path.open('rb')as stream:
+            opened=os.fstat(stream.fileno())
+            if not content.unchanged()or(opened.st_size,opened.st_mtime_ns,opened.st_ino)!=(content.size,content.mtime_ns,content.inode):
+                self.send(409,{'error':'预览素材文件已改变，请重启预览'});return
+            self.send_response(206 if request_range else 200)
+            self.send_header('Content-Type',mime)
+            self.send_header('Content-Length',str(end-start+1))
+            self.send_header('Accept-Ranges','bytes')
+            self.send_header('Cache-Control','no-store')
+            self.send_header('X-Content-Type-Options','nosniff')
+            if request_range:self.send_header('Content-Range',f'bytes {start}-{end}/{content.size}')
+            self.end_headers();stream.seek(start);remaining=end-start+1
+            try:
+                while remaining:
+                    chunk=stream.read(min(256*1024,remaining))
+                    if not chunk:break
+                    self.wfile.write(chunk);remaining-=len(chunk)
+            except (BrokenPipeError,ConnectionResetError,TimeoutError):
+                pass
 
     def do_POST(self):
+        with self.server.game_lock:
+            self.post_locked()
+
+    def post_locked(self):
         route = self.route()
         if route is None:
             return
@@ -215,16 +286,29 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 raise BridgeError('请求必须是对象')
             if route == 'click':
                 result = self.server.game.click(data.get('name'), data.get('revision'))
+            elif route == 'key':
+                result = self.server.game.key(data.get('key'), data.get('revision'),
+                                              data.get('repeat', False))
+            elif route == 'input':
+                if set(data) != {'event', 'revision'}:
+                    raise BridgeError('input 请求只接受 event/revision')
+                result = self.server.game.input(data['event'], data['revision'])
+            elif route == 'video-event':
+                result = self.server.game.video_event(data)
+            elif route == 'scroll-event':
+                result = self.server.game.scroll_event(data)
             elif route == 'reset':
                 previous = self.server.game.revision
                 if type(data.get('revision')) is not int or data['revision'] != previous:
                     raise BridgeError('预览状态已变化，请重新读取后 reset')
                 game = PreviewGame(self.server.bundle)
                 game.revision = previous + 1
+                self.server.game.close()
                 self.server.game = game
                 result = game.snapshot()
             elif route == 'stop':
                 self.server.stopping = True
+                self.server.game.close()
                 result = {'stopped': True, 'native_runtime': False}
             else:
                 self.send(404, {'error': '预览操作不存在'})
@@ -250,6 +334,9 @@ def serve(request_path):
             request.unlink(missing_ok=True)
             while not server.stopping and time.monotonic() - server.last_request < 7200:
                 server.handle_request()
+                with server.game_lock:
+                    if not server.stopping:
+                        server.game.advance()
     except Exception as exc:
         request.with_suffix('.error').write_text(str(exc)[:1500], encoding='utf-8')
     finally:

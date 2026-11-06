@@ -5,7 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 import wave
 import zipfile
 
@@ -119,7 +119,7 @@ class AuthoringTests(Files):
 class BatchTests(Files):
     def setUp(self):
         super().setUp();self.remote={1:'return 1',2:'return 2'};self.writes=[];self.lose_reply=False
-        self.bridge=Mock();self.bridge.read.side_effect=lambda resource,gid,sid:{'response':{'data':{'command':self.remote[sid]}}}
+        self.bridge=Mock();self.bridge.read.side_effect=lambda resource,gid,sid,**kwargs:{'response':{'data':{'command':self.remote[sid]}}}
         self.scene=Mock();self.scene.apply_scene.side_effect=self.apply
         self.service=BatchService(self.bridge,self.scene)
     def apply(self,gid,sid,path,expected,backup,**kwargs):
@@ -150,7 +150,7 @@ class BatchTests(Files):
         self.assertEqual(self.remote[1],'return 10')
     def test_target_edit_during_remote_preflight_cannot_change_saved_content(self):
         plan=self.plan()
-        def read(resource,gid,sid):
+        def read(resource,gid,sid,**kwargs):
             (self.root/'plan/001-target.lua').write_text('return 999')
             return {'response':{'data':{'command':self.remote[sid]}}}
         self.bridge.read.side_effect=read
@@ -191,6 +191,7 @@ class AudioTests(Files):
         super().setUp();self.path=self.root/'tone.wav'
         with wave.open(str(self.path),'wb') as w:w.setnchannels(1);w.setsampwidth(2);w.setframerate(8000);w.writeframes(b'\0\0'*800)
         self.bridge=Mock();self.bridge._auth.return_value=({'Cookie':'TOKEN=private'},{'csrf_token':'private'})
+        self.bridge._tianma_auth.return_value=({'Cookie':'TOKEN=native-private;TIANMA_TOKEN=native-private'},{'csrf_token':'native-private'})
         self.requests=[];self.fail=False
         self.service=AudioService(self.bridge,httpx.MockTransport(self.handle))
     def handle(self,r):
@@ -198,7 +199,10 @@ class AudioTests(Files):
         if r.url.host=='fp.ps.netease.com':
             self.assertNotIn('cookie',r.headers);self.assertNotIn('csrf_token',r.url.params)
             return httpx.Response(200,headers={'response-fid':'audio-test'})
-        if r.url.path.endswith('/token'):data={'token':'scoped'}
+        if r.url.path.endswith('/token'):
+            self.assertEqual(r.url.path,'/tianma-server-api/filepicker/token')
+            self.assertEqual(r.headers['Cookie'],'TOKEN=native-private;TIANMA_TOKEN=native-private')
+            data={'token':'scoped'}
         elif r.method=='POST':
             if self.fail:raise httpx.ReadTimeout('private query')
             data={'id':101,'gameMaterialId':102}
@@ -218,6 +222,20 @@ class AudioTests(Files):
     def test_truncated_wav_rejected_before_auth(self):
         raw=self.path.read_bytes();self.path.write_bytes(raw[:-10])
         with self.assertRaises(BridgeError):self.upload()
+        self.bridge._auth.assert_not_called()
+    def test_mp3_metadata_and_native_registration_type(self):
+        self.path=self.root/'music.mp3';self.path.write_bytes(b'MPEG'*32)
+        info={'streams':[{'codec_type':'audio','codec_name':'mp3'}],'format':{'duration':'120'}}
+        with patch('pegasus_bridge.audio.subprocess.check_output',return_value=json.dumps(info).encode()):
+            r=self.upload()
+        self.assertEqual(r['duration'],120)
+        registered=[json.loads(q.content) for q in self.requests if q.method=='POST' and q.url.host=='avg.163.com']
+        self.assertEqual(registered[0]['fileType'],'mp3')
+    def test_mislabeled_aac_is_not_accepted_as_mp3(self):
+        self.path=self.root/'music.mp3';self.path.write_bytes(b'AAC!'*32)
+        info={'streams':[{'codec_type':'audio','codec_name':'aac'}],'format':{'duration':'120'}}
+        with patch('pegasus_bridge.audio.subprocess.check_output',return_value=json.dumps(info).encode()),self.assertRaises(BridgeError):
+            self.upload()
         self.bridge._auth.assert_not_called()
 
 

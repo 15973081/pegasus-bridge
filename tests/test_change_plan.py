@@ -21,7 +21,7 @@ class ChangeTests(unittest.TestCase):
         self.tree = dict(gameId=42, sceneId=1, nodes=[dict(name='start', video_id='1', title_text='Start', story_res_id='$1')])
         self.values = {('scene',1):'return 1', ('ui','cover'):{'title':'old'}, ('story_tree',1):self.tree}
         self.initial = copy.deepcopy(self.values)
-        def read(resource, gid, sid):
+        def read(resource, gid, sid, **kwargs):
             if resource == 'commands': value = {'command':self.values['scene',sid]}
             elif resource == 'ui_template': value = {'template':json.dumps({'cover':self.values['ui','cover']})}
             else: value = self.values['story_tree',sid]

@@ -38,6 +38,22 @@ class BridgeTests(unittest.TestCase):
             self.assertNotIn("CSRF", json.dumps(value))
         self.assertEqual(self.bridge.recent_games()["games"][0]["scene_ids"], [7])
 
+    def test_long_hex_program_redaction_remains_linear_and_keeps_keys_hidden(self):
+        import time
+        data='abcdef0123456789'*40000
+        started=time.monotonic()
+        result=redact(data+' headerToken=PRIVATE & custom_access_token=SECOND')
+        self.assertTrue(result.startswith(data))
+        self.assertNotIn('PRIVATE',result);self.assertNotIn('SECOND',result)
+        self.assertLess(time.monotonic()-started,3)
+
+    def test_logs_omit_whole_large_lines_without_exposing_prefix_or_suffix(self):
+        (self.root/'log.txt').write_text('SECRET_PREFIX'+('f'*50000)+'SECRET_SUFFIX\n[B13-BOOT] VM_START\n',encoding='utf-8')
+        result=self.bridge.logs(2)
+        text=json.dumps(result,ensure_ascii=False)
+        self.assertNotIn('SECRET_PREFIX',text);self.assertNotIn('SECRET_SUFFIX',text)
+        self.assertIn('VM_START',text);self.assertIn('超长日志行已省略',text)
+
     def test_invalid_ids_and_resource_fail_before_auth(self):
         for resource, gid, sid in (("game", -1, None), ("commands", 42, None), ("../../x", 42, None)):
             with self.assertRaises(BridgeError):

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -9,6 +10,7 @@ import subprocess
 from collections import deque
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, parse_qs
+from importlib.metadata import version
 
 import httpx
 
@@ -27,7 +29,7 @@ def redact(value):
         return [redact(v) for v in value]
     if isinstance(value, str):
         value = re.sub(r'(?i)(\b(?:authorization|cookie|set-cookie)\s*[:=]\s*)[^\r\n]+', r'\1<redacted>', value)
-        return re.sub(r'''(?ix)([\w-]*(?:token|password|passwd|secret|session|ticket|signature)[\w-]*["']?\s*[:=]\s*["']?)[^\s&,;"'\}\]]+''', r'\1<redacted>', value)
+        return re.sub(r'''(?ix)(?<![\w-])([\w-]*(?:token|password|passwd|secret|session|ticket|signature)[\w-]*["']?\s*[:=]\s*["']?)[^\s&,;"'\}\]]+''', r'\1<redacted>', value)
     return value
 
 
@@ -53,30 +55,43 @@ class Pegasus:
             yield from stream
 
     def status(self) -> dict:
+        from .process_security import process_security
         launcher = self.install / "PegasusEditorLauncher.exe"
         executable = self.install / "Release_Windows_Tianma.exe"
         build = self.install / "Release_Windows_Tianma_Data/StreamingAssets/build_info"
         processes = []
         if os.name == "nt":
+            import ctypes
+            from ctypes import wintypes
             import win32process
             import win32api
+            query_image = ctypes.WinDLL('kernel32', use_last_error=True).QueryFullProcessImageNameW
+            query_image.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
+                                    ctypes.POINTER(wintypes.DWORD)]
+            query_image.restype = wintypes.BOOL
             for pid in win32process.EnumProcesses():
                 try:
-                    handle = win32api.OpenProcess(0x0410, False, pid)
+                    # Image-path discovery needs no access to another process's memory.
+                    handle = win32api.OpenProcess(0x1000, False, pid)
                     try:
-                        path = win32process.GetModuleFileNameEx(handle, 0)
-                        if Path(path).parent.resolve() == self.install.resolve():
-                            processes.append({"pid": pid, "executable": Path(path).name})
+                        buffer = ctypes.create_unicode_buffer(32768)
+                        size = wintypes.DWORD(len(buffer))
+                        if query_image(int(handle), 0, buffer, ctypes.byref(size)):
+                            path = Path(buffer.value)
+                            if path.parent.resolve() == self.install.resolve():
+                                processes.append({"pid": pid, "executable": path.name,"security":process_security(pid)})
                     finally:
                         handle.Close()
                 except Exception:
                     continue
-        return {"install_dir": str(self.install), "installed": launcher.is_file() and executable.is_file(),
+        return {"bridge_version": version('pegasus-bridge'),
+                "install_dir": str(self.install), "installed": launcher.is_file() and executable.is_file(),
                 "build": build.read_text(errors="replace").strip() if build.exists() else None,
                 "data_dir": str(self.data), "log_available": self.log.is_file(), "processes": processes,
+                "current_process_security":process_security(),
                 "auth_configured": bool(os.environ.get("PEGASUS_TOKEN") or os.environ.get("PEGASUS_COOKIE")),
                 "allow_log_auth": os.environ.get("PEGASUS_ALLOW_LOG_AUTH") == "1",
-                "capabilities": ["get_orientation", "set_orientation", "create_orientation_variant", "launch", "open_game", "editor_state", "game_state", "player_state", "inventory", "list_archives", "read_archive", "diagnostics", "recent_games", "command_catalog", "read_api", "export", "upload_image", "apply_ui_template", "apply_scene", "ensure_chapter", "apply_story_tree", "apply_mall_ui", "apply_goods", "mall_overview", "build_mall_ui", "ensure_checkpoint_variable", "preview_start", "preview_state", "preview_click", "preview_reset", "preview_stop", "authoring_init", "authoring_read", "character_add", "character_place", "build_scene", "validate_scene", "batch_plan", "batch_apply", "batch_resume", "history", "diff", "restore", "upload_audio", "audio_bind", "test_route", "preview_report", "project_check", "project_pack", "list_drafts", "save_draft", "change_plan", "change_apply", "change_reverse_plan", "native_qa_begin", "native_qa_report", "list_games", "resolve_game"],
+                "capabilities": ["get_orientation", "set_orientation", "create_orientation_variant", "launch", "open_game", "editor_state", "game_state", "player_state", "inventory", "list_archives", "read_archive", "diagnostics", "recent_games", "command_catalog", "read_api", "export", "upload_image", "image_catalog", "upload_video", "video_catalog", "apply_ui_template", "apply_scene", "ensure_chapter", "apply_story_tree", "apply_mall_ui", "apply_goods", "mall_overview", "build_mall_ui", "ensure_checkpoint_variable", "preview_start", "preview_state", "preview_click", "preview_key", "preview_input", "preview_reset", "preview_stop", "authoring_init", "authoring_read", "character_add", "character_place", "build_scene", "validate_scene", "batch_plan", "batch_apply", "batch_resume", "history", "diff", "restore", "upload_audio", "audio_bind", "test_route", "preview_report", "project_check", "project_pack", "list_drafts", "save_draft", "change_plan", "change_apply", "change_reverse_plan", "native_qa_begin", "native_qa_report", "list_games", "resolve_game"],
                 "limitations": ["非官方适配层；支持基本 UI、剧情、章节、故事线与商城编辑，不支持发布", "在线操作需要有效会话；历史日志中的会话可能失效"]}
 
     def launch(self) -> dict:
@@ -122,7 +137,9 @@ class Pegasus:
         # Login payloads are not useful diagnostics; suppress whole lines, not only known keys.
         result = []
         for line in deque(self._lines(), maxlen=lines):
-            if re.search(r"(?i)(setuserinfo|login|cookie|authorization|headerToken|csrf_token|password|access_token)", line):
+            if len(line)>8192:
+                result.append('[超长日志行已省略，字符数='+str(len(line.rstrip()))+']')
+            elif re.search(r"(?i)(setuserinfo|login|cookie|authorization|headerToken|csrf_token|password|access_token)", line):
                 result.append("[包含认证信息的日志行已隐藏]")
             else:
                 result.append(redact(line.rstrip()))
@@ -134,6 +151,26 @@ class Pegasus:
         if not matches:
             raise BridgeError("未找到该作品的本地指令分类缓存；先在编辑器中打开作品")
         return {"source": str(matches[0]), "data": redact(json.loads(matches[0].read_text(encoding="utf-8-sig")))}
+
+    def _tianma_auth(self):
+        """Own current native session, distinct from the portal TOKEN session.
+
+        Matches shipped CookieTokenAppender's TOKEN + TIANMA_TOKEN pair. Never
+        send this credential to the file host or use it as an upload grant.
+        """
+        token = os.environ.get('PEGASUS_TIANMA_TOKEN', '')
+        if not token and os.environ.get('PEGASUS_ALLOW_LOG_AUTH') == '1':
+            for line in self._lines():
+                match = re.search(r'\[NetworkManager\]\[Request\].*?headerToken=(\S+) url=(\S+)', line)
+                if match:
+                    url = urlsplit(match[2])
+                    if (url.hostname == 'avg.163.com' and
+                        url.path.startswith(('/avg-editor-api/', '/tianma-server-api/'))):
+                        token = match[1]
+        if not token or not re.fullmatch(r'[A-Za-z0-9_.-]+', token):
+            raise BridgeError('缺少有效原生天马会话；保持编辑器登录或设置 PEGASUS_TIANMA_TOKEN')
+        return {'Accept':'application/json', 'Referer':'https://avg.163.com/',
+                'Cookie':f'TOKEN={token};TIANMA_TOKEN={token}'}, {'csrf_token':token}
 
     def _auth(self):
         token = os.environ.get("PEGASUS_TOKEN", "")
@@ -166,8 +203,10 @@ class Pegasus:
             headers["Cookie"] = cookie
         return headers, {"csrf_token": csrf} if csrf else {}
 
-    def read(self, resource: str, game_id: int, scene_id: int | None = None, catalog_id: int | None = None, ui_id: str | None = None):
+    def read(self, resource: str, game_id: int, scene_id: int | None = None, catalog_id: int | None = None, ui_id: str | None = None, *, _raw_source=False):
         game_id = positive_id(game_id)
+        if _raw_source and resource != 'commands':
+            raise BridgeError('原始源码读取仅限内部剧情版本检查')
         if resource == "mall_ui":
             from .mall import MallUIService
             return MallUIService(self).read_ui(game_id, catalog_id, ui_id)
@@ -198,7 +237,18 @@ class Pegasus:
             raise BridgeError(f"后台拒绝读取（state.code={state.get('code')}）；请重新登录并配置有效会话。历史日志凭据不保证可用")
         if "data" not in payload:
             raise BridgeError("后台响应缺少 data；无法确认读取成功")
-        return {"source": "live_api", "resource": resource, "game_id": game_id, "response": redact(payload)}
+        result={"source": "live_api", "resource": resource, "game_id": game_id, "response": redact(payload)}
+        if resource=='commands' and isinstance(payload.get('data'),dict):
+            source=payload['data'].get('command')
+            if source is None: source=''
+            if not isinstance(source,str):raise BridgeError('后台剧情格式无效')
+            result['source_sha256']=hashlib.sha256(source.encode('utf-8')).hexdigest()
+            result['source_redacted']=result['response']['data'].get('command') not in (source,None)
+            if _raw_source:
+                # Exact source is required for local backups and optimistic version checks.
+                # Other response fields, including server-issued tokens, remain redacted.
+                result['response']['data']['command']=source
+        return result
 
     def export(self, resource: str, game_id: int, output: str, scene_id: int | None = None, catalog_id: int | None = None, ui_id: str | None = None):
         # Fetch first; a failed request must never produce a success-looking snapshot.

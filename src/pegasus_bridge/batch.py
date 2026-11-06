@@ -21,7 +21,7 @@ class BatchService:
         self.scene=scene_service or SceneService(bridge)
 
     def remote(self,gid,sid):
-        value=self.bridge.read('commands',gid,sid)['response']['data']['command']
+        value=self.bridge.read('commands',gid,sid,_raw_source=True)['response']['data']['command']
         if value is None:return ''
         if not isinstance(value,str):raise BridgeError('后台剧情格式无效')
         return value

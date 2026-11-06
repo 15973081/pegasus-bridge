@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import Mock
 
 import httpx
+from PIL import Image
 from pegasus_bridge.core import BridgeError
 from pegasus_bridge.ui import UIService, digest
 
@@ -22,6 +23,7 @@ class UITests(unittest.TestCase):
         self.requests = []
         self.bridge = Mock()
         self.bridge._auth.return_value = ({'Cookie': 'TOKEN=secret'}, {'csrf_token': 'secret'})
+        self.bridge._tianma_auth.return_value = ({'Cookie':'TOKEN=native-secret;TIANMA_TOKEN=native-secret'}, {'csrf_token':'native-secret'})
         self.handler = self.handle
 
     def handle(self, req):
@@ -110,9 +112,8 @@ class UITests(unittest.TestCase):
         self.bridge._auth.assert_not_called()
 
     def test_upload_isolates_credentials_and_checkpoints_identity(self):
-        # Header fixture is sufficient for this metadata adapter; it does not decode pixels.
         png = self.root / 'image.png'
-        png.write_bytes(b'\x89PNG\r\n\x1a\n' + struct.pack('>I', 13) + b'IHDR' + struct.pack('>II', 481, 305))
+        Image.new('RGBA', (481, 305), '#123456').save(png)
         calls = []
         def handler(req):
             calls.append(req)
@@ -121,8 +122,10 @@ class UITests(unittest.TestCase):
                 self.assertNotIn('csrf_token', req.url.params)
                 self.assertNotIn(b'secret', req.content)
                 return httpx.Response(201, headers={'response-fid': 'valid-file'})
-            self.assertEqual(req.headers['cookie'], 'TOKEN=secret')
-            self.assertEqual(req.url.params['csrf_token'], 'secret')
+            native='filepicker' in req.url.path
+            self.assertEqual(req.headers['cookie'], 'TOKEN=native-secret;TIANMA_TOKEN=native-secret' if native else 'TOKEN=secret')
+            self.assertEqual(req.url.params['csrf_token'], 'native-secret' if native else 'secret')
+            if native:self.assertEqual(req.url.path,'/tianma-server-api/filepicker/token')
             if 'catalog' in req.url.path: data = {'ownerList': [{'id': 5, 'isDefault': 1}]}
             elif 'filepicker' in req.url.path: data = {'token': 'scoped-file-token'}
             else: data = {'id': 987, 'gameMaterialId': 88}
@@ -136,6 +139,92 @@ class UITests(unittest.TestCase):
         self.assertTrue(service.upload_image(*args)['reused'])
         self.assertEqual(len(calls), before_count)
         with self.assertRaises(BridgeError): service.upload_image(43, *args[1:])
+
+    def test_image_registration_timeout_blocks_second_post(self):
+        png = self.root / 'image.png'
+        Image.new('RGBA', (8, 8)).save(png)
+        cp = self.root / 'upload.json'
+        import hashlib
+        cp.write_text(json.dumps(dict(game_id=42, sha256=hashlib.sha256(png.read_bytes()).hexdigest(),
+            alias='uncertain', category_id=2, url='https://a13.fp.ps.netease.com/file/test',
+            file=str(png), width=8, height=8)), encoding='utf-8')
+        calls = []
+        def handler(req):
+            calls.append(req)
+            if req.method == 'POST':
+                self.assertTrue(json.loads(cp.read_text())['registration_pending'])
+                raise httpx.ReadTimeout('response lost', request=req)
+            return httpx.Response(200, json={'state': {'code': 200000},
+                'data': {'ownerList': [{'id': 5, 'isDefault': 1}]}})
+        self.handler = handler
+        args = (42, str(png), 'uncertain', 2, str(cp))
+        with self.assertRaises(BridgeError): self.service().upload_image(*args)
+        before = len(calls)
+        with self.assertRaisesRegex(BridgeError, '结果不确定'): self.service().upload_image(*args)
+        self.assertEqual(len(calls), before)
+        self.assertEqual(sum(r.method == 'POST' for r in calls), 1)
+        self.assertFalse(cp.with_suffix('.json.lock').exists())
+
+    def test_image_lock_prevents_concurrent_registration(self):
+        png = self.root / 'image.png'
+        Image.new('RGBA', (8, 8)).save(png)
+        cp = self.root / 'upload.json'
+        cp.with_suffix('.json.lock').write_text('other process')
+        with self.assertRaisesRegex(BridgeError, '任务锁'):
+            self.service().upload_image(42, str(png), 'locked', 2, str(cp))
+        self.bridge._auth.assert_not_called()
+
+    def test_truncated_png_header_is_not_uploadable(self):
+        png = self.root / 'broken.png'
+        png.write_bytes(b'\x89PNG\r\n\x1a\n' + struct.pack('>I', 13) + b'IHDR' + struct.pack('>II', 481, 305))
+        with self.assertRaises(BridgeError):
+            self.service().upload_image(42, str(png), 'broken', 2, str(self.root / 'upload.json'))
+        self.bridge._auth.assert_not_called()
+
+    def test_image_catalog_uses_explicit_image_category(self):
+        def handler(req):
+            self.assertEqual(req.url.params['categoryId'], '2')
+            self.assertEqual(req.url.params['materialType'], 'imageV2')
+            return httpx.Response(200, json={'state': {'code': 200000}, 'data': {'ownerList': []}})
+        self.handler = handler
+        self.assertEqual(self.service().image_catalog(42), {'ownerList': []})
+        with self.assertRaises(BridgeError): self.service().image_catalog(42, True)
+
+    def test_png_with_valid_chunk_crc_but_bad_compressed_pixels_is_rejected(self):
+        import zlib
+        png=self.root/'corrupt.png'
+        Image.new('RGBA',(8,8)).save(png)
+        data=png.read_bytes();pos=8;parts=[data[:8]]
+        while pos<len(data):
+            length=struct.unpack('>I',data[pos:pos+4])[0];kind=data[pos+4:pos+8];body=data[pos+8:pos+8+length]
+            if kind==b'IDAT':body=b'bad-compressed-pixels'
+            parts.append(struct.pack('>I',len(body))+kind+body+struct.pack('>I',zlib.crc32(kind+body)&0xffffffff))
+            pos+=length+12
+        png.write_bytes(b''.join(parts))
+        with self.assertRaises(BridgeError):
+            self.service().upload_image(42,str(png),'corrupt',2,str(self.root/'upload.json'))
+        self.bridge._auth.assert_not_called()
+
+    def test_registered_image_checkpoint_rejects_external_url(self):
+        import hashlib
+        png=self.root/'image.png';Image.new('RGBA',(8,8)).save(png)
+        cp=self.root/'upload.json'
+        cp.write_text(json.dumps(dict(game_id=42,sha256=hashlib.sha256(png.read_bytes()).hexdigest(),
+            alias='test',category_id=2,id=123,url='https://example.com/file')),encoding='utf-8')
+        with self.assertRaises(BridgeError):self.service().upload_image(42,str(png),'test',2,str(cp))
+        self.bridge._auth.assert_not_called()
+
+    def test_image_upload_rate_limit_surfaces_numeric_retry_after(self):
+        png=self.root/'image.png';Image.new('RGBA',(8,8)).save(png)
+        def handler(req):
+            if req.url.host=='fp.ps.netease.com':return httpx.Response(429,headers={'retry-after':'120'})
+            data={'ownerList':[{'id':5,'isDefault':1}]} if 'catalog' in req.url.path else {'token':'scoped'}
+            return httpx.Response(200,json={'state':{'code':200000},'data':data})
+        self.handler=handler
+        cp=self.root/'upload.json'
+        with self.assertRaisesRegex(BridgeError,'Retry-After=120'):
+            self.service().upload_image(42,str(png),'limited',2,str(cp))
+        self.assertFalse(cp.exists())
 
     def test_network_errors_do_not_expose_auth_url(self):
         def handler(req): raise httpx.ConnectError('https://host/?csrf_token=secret', request=req)

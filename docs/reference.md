@@ -83,7 +83,8 @@ uv sync --locked --extra preview --inexact
 - `PEGASUS_TOKEN_HEADER`：可选的自定义令牌请求头名称；默认不设置。仅适用于明确需要自定义头的环境。
 - `PEGASUS_COOKIE`：可选的完整 Cookie 请求头，可单独提供。
 - `PEGASUS_CSRF_TOKEN`：可选的 CSRF 值。
-- `PEGASUS_ALLOW_LOG_AUTH=1`：没有显式 token/cookie 时，从本地请求日志中最新的 `csrf_token` 还原 TOKEN Cookie；不使用 Unity 的 `headerToken`。库和公开示例默认关闭，需要使用自己的本机会话时再启用，日志会话仍可能过期。
+- `PEGASUS_ALLOW_LOG_AUTH=1`：门户接口在没有显式 token/cookie 时，从本地请求日志的 `csrf_token` 还原门户 TOKEN Cookie。原生天马上传接口独立读取同一原生客户端的 `headerToken`，按客户端 CookieTokenAppender 构造 `TOKEN` 与 `TIANMA_TOKEN` cookie 对；两种会话不混用。库和公开示例默认关闭，只能使用自己的本机会话，日志会话可能过期。
+- `PEGASUS_TIANMA_TOKEN`：显式提供自己的原生天马会话；仅用于固定 `avg.163.com/tianma-server-api` 的素材上传令牌入口。不会把登录 cookie 或此令牌发送给文件服务器；文件服务器仅接收限定上传凭证。
 - `PEGASUS_INSTALL_DIR` / `PEGASUS_DATA_DIR`：覆盖安装目录与用户数据目录。
 
 ## 不操作桌面的作品工作流

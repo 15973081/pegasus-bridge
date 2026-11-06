@@ -1,4 +1,5 @@
 import json
+from importlib.metadata import version
 from pathlib import Path
 import subprocess
 import sys
@@ -6,6 +7,9 @@ import tempfile
 import tomllib
 import unittest
 from unittest.mock import patch
+
+from mcp import StdioServerParameters
+import pegasus_bridge.installation as installation
 
 from pegasus_bridge.core import BridgeError
 from pegasus_bridge.installation import client_config, doctor_mcp
@@ -35,16 +39,25 @@ class InstallationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as cwd:
             result = subprocess.run([sys.executable, '-m', 'pegasus_bridge.server', '--version'],
                                     cwd=cwd, capture_output=True, encoding='utf-8', timeout=10, check=True)
-        self.assertRegex(result.stdout.strip(), r'^pegasus-mcp \d+\.\d+\.\d+$')
+        self.assertEqual(result.stdout.strip(), 'pegasus-mcp ' + version('pegasus-bridge'))
 
     def test_doctor_real_protocol_from_unrelated_directory(self):
-        report = doctor_mcp()
+        # Probe the module under test even when a previous wheel is still installed.
+        # The production doctor deliberately keeps the SDK's restricted child environment.
+        def source_server(**kwargs):
+            return StdioServerParameters(**kwargs, env={
+                'PYTHONPATH': str(Path(installation.__file__).resolve().parents[1])})
+        with patch('mcp.StdioServerParameters', side_effect=source_server):
+            report = doctor_mcp()
         self.assertTrue(report['initialize'])
         self.assertTrue(report['list_tools'])
         self.assertTrue(report['status_call'])
         self.assertEqual(report['transport'], 'stdio')
-        self.assertEqual(report['tool_count'], 60)
+        self.assertEqual(report['tool_count'], 68)
+        self.assertIn('pegasus_upload_video', report['tools'])
+        self.assertIn('pegasus_video_catalog', report['tools'])
         self.assertIn('pegasus_preview_start', report['tools'])
+        self.assertIn('pegasus_preview_key', report['tools'])
         self.assertIn('pegasus_save_draft', report['tools'])
         self.assertIn('pegasus_list_drafts', report['tools'])
         self.assertIsInstance(report['editable_install'], bool)

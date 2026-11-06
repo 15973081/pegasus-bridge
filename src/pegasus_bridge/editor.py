@@ -137,10 +137,20 @@ class EditorService:
             raise BridgeError('安装目录中不存在 PegasusEditorLauncher.exe')
         # Verify access before asking the native application to navigate.
         self.bridge.read('game', game_id)
+        status=self.bridge.status()
+        own=status.get('current_process_security') or {}
+        for native in status.get('processes',[]):
+            security=native.get('security') or {}
+            if (native.get('executable','').lower()=='release_windows_tianma.exe' and
+                own.get('integrity_rid') is not None and security.get('integrity_rid') is not None and
+                security['integrity_rid']>own['integrity_rid']):
+                return dict(game_id=game_id,request_sent=False,delivery='blocked',progress='integrity_mismatch',
+                            editor_ready=None,native_pid=native['pid'],current_process_security=own,native_process_security=security,
+                            note='编辑器权限高于MCP，Windows权限隔离可能拒绝原生通信/窗口控制。请自行处理未保存内容并关闭高权限窗口，然后通过MCP正常启动；不会自动提权、终止进程或更改安全策略。')
         uid = local_sdk_uid()
         observation = log_events(self.bridge.log)
         delivery_observation = log_events(self.launcher_log, launcher=True)
-        url = 'pegasus-editor://open?' + urlencode({'gameId': game_id, 'uid': uid})
+        url = 'pegasus-editor://open?' + urlencode({'gameId': game_id, 'sdkuid': uid})
         # Native launcher owns single-instance IPC; no guessed pipe wire format,
         # shell parsing, mouse/keyboard input, process termination or save bypass.
         try:

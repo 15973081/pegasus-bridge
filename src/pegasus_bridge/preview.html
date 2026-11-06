@@ -4,75 +4,365 @@
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080b0d}
 #stage{position:absolute;transform-origin:top left;overflow:hidden;background:#11191c}
+#stage.input-active{touch-action:none;user-select:none}
+#videos,#ui{position:absolute;inset:0;pointer-events:none}#videos{z-index:0}#ui{z-index:1}#videos video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;pointer-events:auto}
 .node{position:absolute}.text{display:flex;white-space:pre-wrap;font-family:"Microsoft YaHei",sans-serif;line-height:1.35;pointer-events:none}.inner{width:100%}
-button.node{padding:0;cursor:pointer;color:#eee;background:#263638;border:1px solid #829997;font:28px sans-serif}
-button.art{background:none;border:0}button.node img{width:100%;height:100%}button.node:focus-visible{outline:3px solid #f3c76d;outline-offset:3px}
+.text b{font-weight:700}
+.node.scrollview{overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;scrollbar-gutter:auto}
+.node.scrollview::-webkit-scrollbar{width:var(--scroll-width,6px)}
+.node.scrollview::-webkit-scrollbar-track{background:var(--scroll-track,rgba(66,66,66,.312))}
+.node.scrollview::-webkit-scrollbar-thumb{background:var(--scroll-thumb,rgb(207,207,207))}
+.node.scrollview::-webkit-scrollbar-thumb:hover{background:var(--scroll-hover,rgb(219,219,219))}
+.node.scrollview::-webkit-scrollbar-thumb:active{background:var(--scroll-pressed,rgb(191,188,188))}
+button.node{padding:0;cursor:pointer;color:#eee;background:#263638;border:1px solid #829997;font:28px sans-serif;display:flex;align-items:center;justify-content:center;overflow:hidden}
+button.art{background:none;border:0}button.node img{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}button.node .button-label{position:relative;z-index:1;pointer-events:none;white-space:pre-wrap;max-width:100%}button.node:focus-visible{outline:3px solid #f3c76d;outline-offset:3px}
 #bar{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;gap:12px;background:#10191fee;color:#b9d2d4;padding:6px 10px;font:12px sans-serif;z-index:99999}
 #bar span{flex:1}#bar button{color:#fff;background:#263b45;border:1px solid #66858b;padding:5px 12px;cursor:pointer}
 #error{position:fixed;top:12px;left:20%;right:20%;color:#fff;background:#5b2929;padding:14px;z-index:100000;display:none;white-space:pre-wrap}
 </style>
-<main id="stage" aria-label="Lua 预览画面"></main>
-<div id="bar"><span id="status">同源 Lua 近似预览 · 非天马原生运行 · 会话进度不写入天马</span><button id="reload">刷新状态</button><button id="reset">重置预览</button></div>
+<main id="stage" tabindex="0" aria-label="Lua 预览画面"><div id="videos"></div><div id="ui"></div></main>
+<div id="bar"><span id="status">同源 Lua 近似预览 · 非天马原生运行 · 会话进度不写入天马</span><button id="sound">启用声音 / 播放</button><button id="reload">刷新状态</button><button id="reset">重置预览</button></div>
 <div id="error" role="alert"></div>
 <script>
-let resources={},state=null,busy=false,noticeCount=0;
-const sounds=new Map(), stage=document.getElementById('stage'), error=document.getElementById('error');
+let resources={},state=null,busy=false,noticeCount=0,queue=Promise.resolve(),soundEnabled=false;
+// Only the basic TMP tags emitted by the migration text host are interpreted.
+// Other markup stays literal; source text never becomes browser HTML.
+function drawTextContent(item,value){
+ const content=String(value??'');if(item.textContentSource===content)return;
+ const fragment=document.createDocumentFragment(),stack=[{node:fragment,tag:null}];
+ const tags=/<(\/?)(b|i|u|s)>/gi;let start=0,match;
+ const append=value=>{if(value)stack.at(-1).node.append(document.createTextNode(value))};
+ while((match=tags.exec(content))!==null){
+  append(content.slice(start,match.index));const tag=match[2].toLowerCase();
+  if(!match[1]){const node=document.createElement(tag);stack.at(-1).node.append(node);stack.push({node,tag})}
+  else if(stack.length>1&&stack.at(-1).tag===tag)stack.pop();
+  else append(match[0]);
+  start=tags.lastIndex;
+ }
+ append(content.slice(start));item.inner.replaceChildren(fragment);item.textContentSource=content;
+}
+const sounds=new Map(),movies=new Map(),stage=document.getElementById('stage'),ui=document.getElementById('ui'),videoLayer=document.getElementById('videos'),error=document.getElementById('error');
+const pointerContacts=new Map(),hoveredButtons=new Map(),queuedMoves=new Map();
+// UI identity is independent of media and snapshots. In particular a pressed or
+// keyboard-focused button must survive unrelated Lua/frame/image updates.
+const uiNodes=new Map();
+let viewportAckKey=null,viewportPendingKey=null,inputQueued=0,lastCursor=null;
 function warn(message){error.textContent=message;error.style.display='block'}
-function resize(){if(!state)return;const w=state.width,h=state.height,s=Math.min(innerWidth/w,(innerHeight-38)/h);Object.assign(stage.style,{width:w+'px',height:h+'px',transform:`scale(${s})`,left:(innerWidth-w*s)/2+'px',top:(innerHeight-38-h*s)/2+'px'})}
+function resize(){if(!state)return;const w=state.width,h=state.height,s=Math.min(innerWidth/w,(innerHeight-38)/h);Object.assign(stage.style,{width:w+'px',height:h+'px',transform:`scale(${s})`,left:(innerWidth-w*s)/2+'px',top:(innerHeight-38-h*s)/2+'px'});reportViewport()}
 addEventListener('resize',resize);
 function pair(value,fallback){return Array.isArray(value)&&value.length===2?value:fallback}
+function gain(value,fallback=1){return Number.isFinite(value)?Math.max(0,Math.min(1,value)):fallback}
+function mixVolume(data,channel){return gain(data.mix_settings?.[channel])}
+function visibleButton(data,name,generation){
+ const cfg=data?.objects[name];if(cfg?._kind!=='button'||cfg.preview_generation!==generation||cfg.visible===false)return false;
+ const seen=new Set([name]);let parent=cfg.inlayer;
+ while(parent&&parent!=='window'){
+  if(seen.has(parent))return false;seen.add(parent);
+  const item=data.objects[parent];if(!item||item.visible===false)return false;parent=item.inlayer;
+ }
+ return true;
+}
+function liveButton(item){return item.active&&uiNodes.get(item.name)===item&&item.el.isConnected&&visibleButton(state,item.name,item.generation)}
+function imageSource(el,src){if(el.getAttribute('src')!==src)el.setAttribute('src',src)}
+function buttonArtwork(item){
+ if(item.artwork)imageSource(item.artwork,(item.pointerOver||hoveredButtons.get(item.name)===item.generation)?(resources[item.cfg.hover_resId]||item.src):item.src);
+}
+function retireNode(item){
+ item.active=false;item.el.onclick=null;item.el.onmouseenter=null;item.el.onmouseleave=null;item.el.remove();
+ if(hoveredButtons.get(item.name)===item.generation)hoveredButtons.delete(item.name);
+}
 function draw(data){
- state=data;document.title=data.title+' · Lua 近似预览';stage.replaceChildren();resize();
- const nodes=new Map(),pending=Object.values(data.objects);
+ if(state?.input_generation!==data.input_generation){clearLocalContacts();hoveredButtons.clear()}
+ for(const[name,generation]of hoveredButtons)if(!visibleButton(data,name,generation))hoveredButtons.delete(name);
+ state=data;document.title=data.title+' · Lua 近似预览';resize();drawVideos(data);
+ stage.classList.toggle('input-active',!!data.input_binding_count);
+ const nodes=new Map(),pending=Object.values(data.objects),retired=[];
  function append(cfg,chain=new Set()){
   if(nodes.has(cfg.name))return nodes.get(cfg.name);
   if(chain.has(cfg.name))throw Error('控件父级循环：'+cfg.name);
   chain.add(cfg.name);
-  let parent=stage,pw=data.width,ph=data.height;
+  let parent=ui,pw=data.width,ph=data.height;
   if(cfg.inlayer&&cfg.inlayer!=='window'){
    const p=data.objects[cfg.inlayer];if(!p)throw Error('缺少父图层：'+cfg.inlayer);
    parent=append(p,chain);[pw,ph]=pair(p.size,[pw,ph]);
+   if(p._kind==='scrollview'){parent=uiNodes.get(p.name).inner;[pw,ph]=pair(p.contentArea,[pw,ph])}
   }
   const kind=cfg._kind,[x,y]=pair(cfg.pos,[pw/2,ph/2]),[w,h]=pair(cfg.size,[pw,ph]),[ax,ay]=pair(cfg.anchor,[50,50]);
-  const key=cfg.resId||cfg.normal_resId,src=resources[key];
+  const key=cfg.resId||cfg.res_id||cfg.normal_resId,src=resources[key];
   if(key&&!src)throw Error('配置中缺少素材：'+key);
-  const el=document.createElement(kind==='button'?'button':kind==='image'?'img':'div');el.className='node';el.id=cfg.name;
-  Object.assign(el.style,{left:(x-w*ax/100)+'px',top:(ph-y-h*(1-ay/100))+'px',width:w+'px',height:h+'px',zIndex:cfg.index||0,opacity:typeof cfg.opacity==='number'?cfg.opacity/100:1,display:cfg.visible===false?'none':''});
-  if(kind==='layer'){el.style.pointerEvents='none'}else el.style.pointerEvents=kind==='button'?'auto':'none';
-  if(kind==='button'){
-   if(src){el.classList.add('art');const im=document.createElement('img');im.src=src;im.alt='';el.append(im);el.onmouseenter=()=>{im.src=resources[cfg.hover_resId]||src};el.onmouseleave=()=>{im.src=src}}
-   else el.textContent=cfg.text||cfg.name;
-   el.setAttribute('aria-label',data.objects[cfg.name+'_label']?.content||cfg.text||cfg.name);el.onclick=()=>action('click',{name:cfg.name,revision:state.revision});
-  }else if(kind==='image'){el.src=src;el.alt=''}
-  else if(kind==='text'){
-   el.classList.add('text');const style=data.styles[cfg.text_style]||{};
-   Object.assign(el.style,{fontSize:(cfg.font_size||style.font_size||30)+'px',fontWeight:style.bold?700:400,color:style.color||'#fff',textAlign:(cfg.alignment||'').includes('Right')?'right':(cfg.alignment||'').includes('Center')?'center':'left',alignItems:(cfg.alignment||'').includes('Top')?'flex-start':(cfg.alignment||'').includes('Bottom')?'flex-end':'center'});
-   if(cfg.visible!==false)el.style.display='flex';const text=document.createElement('div');text.className='inner';text.textContent=cfg.content||'';el.append(text);
+  let item=uiNodes.get(cfg.name);
+  if(item&&(item.kind!==kind||item.generation!==cfg.preview_generation)){
+   // Do not remove a replaced parent until its retained children have moved.
+   item.active=false;retired.push(item);uiNodes.delete(cfg.name);item=null;
   }
-  nodes.set(cfg.name,el);parent.append(el);return el;
+  if(!item){
+   const el=document.createElement(kind==='button'?'button':kind==='image'?'img':'div');el.className='node';el.id=cfg.name;
+   item={name:cfg.name,kind,generation:cfg.preview_generation,el,active:true,artwork:null,inner:null,pointerOver:false};uiNodes.set(cfg.name,item);
+   if(kind==='scrollview'){
+    el.classList.add('scrollview');el.tabIndex=-1;
+    item.inner=document.createElement('div');item.inner.style.position='relative';el.append(item.inner);
+    item.report=()=>{
+     if(!item.active||uiNodes.get(item.name)!==item||state?.objects[item.name]?.preview_generation!==item.generation)return;
+     const report={name:item.name,generation:item.generation,top:el.scrollTop,left:el.scrollLeft,scrollHeight:el.scrollHeight,scrollWidth:el.scrollWidth,clientHeight:el.clientHeight,clientWidth:el.clientWidth};
+     const signature=JSON.stringify(report);if(signature===item.lastScrollReport)return;
+     item.lastScrollReport=signature;
+     action('scroll-event',report,()=>item.active&&uiNodes.get(item.name)===item&&state?.objects[item.name]?.preview_generation===item.generation);
+    };
+    el.addEventListener('scroll',()=>{if(item.active)requestAnimationFrame(item.report)},{passive:true});
+   }
+   if(kind==='button'){
+    el.onmouseenter=event=>{
+     if(!event.isTrusted||!liveButton(item))return;
+     item.pointerOver=true;
+     if(state.input_binding_count&&hoveredButtons.get(item.name)!==item.generation){
+      hoveredButtons.set(item.name,item.generation);buttonArtwork(item);
+      sendInput({kind:'hover',phase:'enter',name:item.name,button_generation:item.generation});
+     }else if(item.artwork)imageSource(item.artwork,resources[item.cfg.hover_resId]||item.src);
+    };
+    el.onmouseleave=event=>{
+     if(!event.isTrusted)return;item.pointerOver=false;if(!liveButton(item))return;
+     if(item.artwork)imageSource(item.artwork,item.src);
+     if(hoveredButtons.get(item.name)===item.generation){
+      hoveredButtons.delete(item.name);
+      if(state.input_binding_count)sendInput({kind:'hover',phase:'leave',name:item.name,button_generation:item.generation});
+     }
+    };
+    el.onclick=event=>{if(event.isTrusted&&liveButton(item))action('click',{name:item.name},()=>liveButton(item))};
+   }
+  }
+  const el=item.el;item.cfg=cfg;item.src=src;
+  if(kind==='button'&&!visibleButton(data,item.name,item.generation))item.pointerOver=false;
+  Object.assign(el.style,{left:(x-w*ax/100)+'px',top:(ph-y-h*(1-ay/100))+'px',width:w+'px',height:h+'px',zIndex:cfg.index||0,opacity:typeof cfg.opacity==='number'?cfg.opacity/100:1,display:cfg.visible===false?'none':''});
+  if(kind==='layer'){el.style.pointerEvents='none'}else el.style.pointerEvents=kind==='button'||kind==='scrollview'?'auto':'none';
+  if(kind==='scrollview'){
+   const[cw,ch]=pair(cfg.contentArea,[w,h]);Object.assign(item.inner.style,{width:cw+'px',height:ch+'px'});
+   const style=cfg._previewScrollbar;
+   if(style){el.style.setProperty('--scroll-width',style.width+'px');for(const[key,prop]of Object.entries({track:'track',thumb:'thumb',hoverThumb:'hover',pressedThumb:'pressed'})){const c=style[key];el.style.setProperty('--scroll-'+prop,`rgba(${c[0]*255},${c[1]*255},${c[2]*255},${c[3]})`)}}
+   requestAnimationFrame(item.report);
+  }
+  if(kind==='button'){
+   el.classList.toggle('art',!!src);
+   if(src){
+    if(!item.artwork){const im=document.createElement('img');im.alt='';item.artwork=im;el.prepend(im)}
+    buttonArtwork(item);
+   }else if(item.artwork){item.artwork.remove();item.artwork=null}
+   if(!item.label){item.label=document.createElement('span');item.label.className='button-label';el.append(item.label)}
+   // Artwork and native text coexist. Explicit empty labels belong to raster
+   // typography controls and must not fall back to the internal object name.
+   const text=String(cfg.btn_text??cfg.text??(src?'':cfg.name));
+   if(item.label.textContent!==text)item.label.textContent=text;
+   const style=data.styles[cfg.textStyle||cfg.text_style||cfg.TextStyle]||{};
+   const styleColor=typeof style.color==='string'&&CSS.supports('color',style.color)?style.color:'#eee';
+   const color=typeof cfg.color==='string'&&CSS.supports('color',cfg.color)?cfg.color:styleColor;
+   const alignment=cfg.alignment||style.alignment||'MiddleCenter';
+   Object.assign(el.style,{fontSize:(cfg.fontSize||cfg.font_size||style.fontSize||style.font_size||28)+'px',fontWeight:(cfg.bold??style.bold)?700:400,color,
+    textAlign:alignment.includes('Right')?'right':alignment.includes('Left')?'left':'center',
+    alignItems:alignment.includes('Top')?'flex-start':alignment.includes('Bottom')?'flex-end':'center',
+    justifyContent:alignment.includes('Right')?'flex-end':alignment.includes('Left')?'flex-start':'center'});
+   el.setAttribute('aria-label',data.objects[cfg.name+'_label']?.content||cfg.text||cfg.btn_text||cfg.name);
+  }else if(kind==='image'){if(src)imageSource(el,src);else el.removeAttribute('src');el.alt=''}
+  else if(kind==='text'){
+   el.classList.add('text');const style=data.styles[cfg.textStyle||cfg.text_style||cfg.TextStyle]||{};
+   const styleColor=typeof style.color==='string'&&CSS.supports('color',style.color)?style.color:'#fff';
+   const color=typeof cfg.color==='string'&&CSS.supports('color',cfg.color)?cfg.color:styleColor;
+   Object.assign(el.style,{fontSize:(cfg.font_size||style.font_size||30)+'px',fontWeight:style.bold?700:400,color,textAlign:(cfg.alignment||'').includes('Right')?'right':(cfg.alignment||'').includes('Center')?'center':'left',alignItems:(cfg.alignment||'').includes('Top')?'flex-start':(cfg.alignment||'').includes('Bottom')?'flex-end':'center'});
+   if(cfg.visible!==false)el.style.display='flex';
+   if(!item.inner){item.inner=document.createElement('div');item.inner.className='inner';el.append(item.inner)}
+   drawTextContent(item,cfg.content);
+  }
+  nodes.set(cfg.name,el);if(el.parentNode!==parent)parent.append(el);return el;
  }
  for(const cfg of pending)append(cfg);
+ for(const[name,item]of uiNodes)if(!nodes.has(name)){uiNodes.delete(name);retired.push(item)}
+ for(const item of retired)retireNode(item);
  const requests=Array.isArray(data.requests)?data.requests:[];
  if(requests.length>noticeCount)warn('已请求原生界面 '+(requests.at(-1).ui_id||'')+'。本预览不执行原生存读档、商城或支付，请在天马内验证。');
  noticeCount=requests.length;
  if(data.fault)warn(data.fault+'\n请重置预览。');
  document.getElementById('status').textContent='同源 Lua 近似预览 · 非天马原生运行 · 会话进度不写入天马 · 状态 '+data.revision;
- for(const [name,item]of sounds){if(!data.audio[name]||data.audio[name].resId!==item.key){item.audio.pause();sounds.delete(name)}}
+ for(const [name,item]of sounds){if(!data.audio[name]||(data.audio[name].resId||data.audio[name].res_id)!==item.key){item.audio.pause();sounds.delete(name)}}
+ playAudio();
 }
-function playAudio(){
- for(const [name,cfg]of Object.entries(state.audio)){
-  if(sounds.has(name)||!resources[cfg.resId])continue;
-  const a=new Audio(resources[cfg.resId]);a.loop=!!cfg.loop;a.volume=Math.max(0,Math.min(1,(cfg.targetVolume??25)/100));
-  sounds.set(name,{audio:a,key:cfg.resId});a.play().catch(()=>{sounds.delete(name)});
+function drawVideos(data){
+ for(const [name,item]of movies){if(!data.videos?.[name]||data.videos[name].generation!==item.generation){item.active=false;item.video.pause();item.video.removeAttribute('src');item.video.load();item.video.remove();movies.delete(name)}}
+ for(const [name,cfg]of Object.entries(data.videos||{})){
+  let item=movies.get(name);
+  if(!item){
+   const src=resources[cfg.resId||cfg.res_id];if(!src)throw Error('配置中缺少视频：'+(cfg.resId||cfg.res_id));
+   const v=document.createElement('video');v.src=src;v.preload='auto';v.controls=true;v.playsInline=true;v.muted=!soundEnabled;v.dataset.name=name;v.dataset.generation=cfg.generation;
+   item={video:v,generation:cfg.generation,active:true,pending:false};movies.set(name,item);videoLayer.append(v);
+   const report=kind=>{
+    if(!item.active||!Number.isFinite(v.currentTime))return;
+    if(kind==='time'&&item.pending)return;
+    if(kind==='time')item.pending=true;
+    const duration=Number.isFinite(v.duration)&&v.duration>0?v.duration:null;
+    action('video-event',{name,generation:item.generation,kind,time:v.currentTime,duration,paused:v.paused,readyState:v.readyState,requestSerial:item.requestSerial,playbackRate:v.playbackRate}).finally(()=>{if(kind==='time')item.pending=false});
+   };
+   item.report=report;
+   v.onloadedmetadata=()=>{if(cfg.time>0&&cfg.time<v.duration)v.currentTime=cfg.time;report('state')};
+   for(const event of ['loadeddata','canplay','pause','play','seeked','ratechange'])v.addEventListener(event,()=>report('state'));
+   v.onplaying=()=>report('playing');v.ontimeupdate=()=>{if(!v.paused)report('time')};v.onended=()=>report('ended');v.onerror=()=>{if(item.active)report('error')};
+  }
+  const v=item.video;v.muted=!soundEnabled;v.volume=mixVolume(data,'videoVolume');
+  const changedRequest=item.requestSerial!==cfg.requestSerial;item.requestSerial=cfg.requestSerial;
+  if(item.rateSerial!==cfg.rateRequestSerial){
+   item.rateSerial=cfg.rateRequestSerial;
+   if(Number.isFinite(cfg.requestedRate)&&v.playbackRate!==cfg.requestedRate)v.playbackRate=cfg.requestedRate;
+  }
+  // Native media controls have no raw-input hit test. Show them outside game
+  // input; while input is bound, gestures target the stage and controls hide.
+  v.controls=!data.input_binding_count;v.style.pointerEvents=data.input_binding_count?'none':'auto';
+  if(cfg.status==='paused'){
+   v.pause();if(Math.abs(v.currentTime-cfg.time)>0.08)v.currentTime=cfg.time;
+  }else if((cfg.status==='playing'||cfg.status==='awaiting_browser')&&v.paused&&!v.ended){v.play().catch(()=>{document.getElementById('sound').textContent='点击播放 / 启用声音'})}
+  if(changedRequest)item.report('state');
  }
 }
-async function readState(){const r=await fetch('state');const d=await r.json();if(!r.ok)throw Error(d.error);draw(d)}
-async function action(endpoint,payload){
- if(busy)return;busy=true;error.style.display='none';
- try{const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){await readState();throw Error(d.error)}if(endpoint==='reset'){for(const item of sounds.values())item.audio.pause();sounds.clear();noticeCount=0}draw(d);playAudio()}
- catch(e){warn(e.message)}finally{busy=false}
+function playAudio(){
+ if(!state)return;
+ for(const [name,cfg]of Object.entries(state.audio)){
+  const key=cfg.resId||cfg.res_id;if(!resources[key])continue;
+  let item=sounds.get(name);
+  if(!item){item={audio:new Audio(resources[key]),key,started:false,failed:false};sounds.set(name,item)}
+  const a=item.audio;a.loop=!!cfg.loop;a.muted=!soundEnabled;
+  a.volume=gain((cfg.targetVolume??25)/100,.25)*mixVolume(state,cfg.source_type===2?'fxVolume':'musicVolume');
+  if(soundEnabled&&!item.started&&!item.failed){
+   item.started=true;a.play().catch(()=>{item.started=false;item.failed=true});
+  }
+ }
 }
+function updateLayerPositions(data){
+ for(const el of ui.querySelectorAll('.node')){
+  const cfg=data.objects[el.id];if(cfg?._kind!=='layer')continue;
+  const parent=data.objects[cfg.inlayer],pw=parent?pair(parent.size,[data.width,data.height])[0]:data.width,ph=parent?pair(parent.size,[data.width,data.height])[1]:data.height;
+  const[x,y]=pair(cfg.pos,[pw/2,ph/2]),[w,h]=pair(cfg.size,[pw,ph]),[ax,ay]=pair(cfg.anchor,[50,50]);
+  el.style.left=(x-w*ax/100)+'px';el.style.top=(ph-y-h*(1-ay/100))+'px';
+ }
+}
+function passiveState(data){state=data;updateLayerPositions(data);drawVideos(data);playAudio();reportViewport()}
+async function readState(){const r=await fetch('state');const d=await r.json();if(!r.ok)throw Error(d.error);if(!state||d.revision!==state.revision||d.render_generation!==state.render_generation||d.input_generation!==state.input_generation||d.fault!==state.fault)draw(d);else passiveState(d)}
+function action(endpoint,payload,guard){
+ const next=async()=>{
+  // An old queued click must never be retargeted to a same-name new owner.
+  if(guard&&!guard())return;
+  busy=true;error.style.display='none';
+  try{
+   if(endpoint==='key'){
+    // Earlier raw inputs/media observations may advance revision while this key waits.
+    // Refresh only for the same captured input owner; never replay onto a new modal.
+    await readState();if(guard&&!guard())return;payload.revision=state.revision;
+   }
+   if(endpoint==='click'||endpoint==='reset')payload.revision=state.revision;
+   const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){await readState();throw Error(d.error)}if(endpoint==='reset'){for(const item of sounds.values())item.audio.pause();sounds.clear();noticeCount=0}draw(d)
+  }
+  catch(e){warn(e.message)}finally{busy=false}
+ };
+ queue=queue.then(next,next);return queue;
+}
+
+function clearLocalContacts(){
+ for(const id of pointerContacts.keys())try{if(stage.hasPointerCapture(id))stage.releasePointerCapture(id)}catch{}
+ pointerContacts.clear();queuedMoves.clear();lastCursor=null;
+}
+function sendInput(event,generation=state?.input_generation){
+ if(!state||state.fault||!generation)return;
+ const moveKey=event.kind==='cursor'&&event.phase==='move'?'cursor':event.kind==='pointer'&&event.phase==='move'?event.id:null;
+ if(moveKey!==null){
+  const old=queuedMoves.get(moveKey);
+  if(old&&!old.started&&old.generation===generation){old.event=event;return}
+ }
+ if(inputQueued>=128){warn('预览输入队列已满；停止本次拖动并重试');return}
+ const item={event,generation,started:false};inputQueued++;
+ if(moveKey!==null)queuedMoves.set(moveKey,item);
+ const next=async()=>{
+  item.started=true;
+  if(moveKey!==null&&queuedMoves.get(moveKey)===item)queuedMoves.delete(moveKey);
+  try{
+   if(!state||state.fault||state.input_generation!==item.generation)return;
+   const observed={...item.event,generation:item.generation,sequence:state.input_sequence+1};
+   const response=await fetch('input',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:observed,revision:state.revision})});
+   const data=await response.json();
+   if(!response.ok){await readState();throw Error(data.error)}
+   if(item.event.kind==='viewport')viewportAckKey=viewportKey(item.event);
+   if(!state||data.render_generation!==state.render_generation||data.input_generation!==state.input_generation||data.fault!==state.fault)draw(data);else passiveState(data);
+  }catch(e){warn(e.message);if(item.event.kind==='pointer')cancelPointer(item.event.id)}
+  finally{inputQueued--;if(item.event.kind==='viewport')viewportPendingKey=null}
+ };
+ queue=queue.then(next,next);return queue;
+}
+const viewportFields=['left','top','width','height','scale','pixelRatio','canvasWidth','canvasHeight','clientWidth','clientHeight'];
+function viewportKey(value){return viewportFields.map(key=>value[key]).join('|')}
+function reportViewport(){
+ if(!state?.input_generation)return;
+ const rect=stage.getBoundingClientRect();if(!rect.width||!rect.height||!stage.offsetWidth)return;
+ const value={kind:'viewport',left:rect.left,top:rect.top,width:rect.width,height:rect.height,
+  scale:rect.width/stage.offsetWidth,pixelRatio:devicePixelRatio,canvasWidth:stage.offsetWidth,canvasHeight:stage.offsetHeight,clientWidth:innerWidth,clientHeight:innerHeight};
+ const key=viewportKey(value),pending=state.input_generation+'|'+key;
+ if((key===viewportAckKey&&state.viewport&&viewportKey(state.viewport)===key)||pending===viewportPendingKey)return;
+ if(pointerContacts.size)for(const id of [...pointerContacts.keys()])cancelPointer(id);
+ viewportPendingKey=pending;sendInput(value);
+}
+new ResizeObserver(()=>reportViewport()).observe(stage);
+function inputTarget(event){return state?.input_binding_count&&!state.fault&&!event.target?.closest?.('button,input,textarea,select,[contenteditable],video,#bar')}
+function coordinates(event){const rect=stage.getBoundingClientRect();const x=(event.clientX-rect.left)*1920/rect.width,y=(event.clientY-rect.top)*1080/rect.height;return x>=0&&x<=1920&&y>=0&&y<=1080?{x,y}:null}
+function cancelPointer(id){
+ const contact=pointerContacts.get(id);if(!contact)return;
+ pointerContacts.delete(id);queuedMoves.delete(id);
+ sendInput({kind:'pointer',phase:'cancel',id,pointer_type:contact.type,x:contact.x,y:contact.y},contact.generation);
+ try{if(stage.hasPointerCapture(id))stage.releasePointerCapture(id)}catch{}
+}
+stage.addEventListener('pointerdown',event=>{
+ // A toolbar interaction must not keep keyboard focus after a real game click.
+ // Video elements intentionally do not feed raw gesture input, but still focus the game.
+ if(event.isTrusted&&event.button===0&&!event.target?.closest?.('button,input,textarea,select,[contenteditable],#bar'))stage.focus({preventScroll:true});
+ if(!event.isTrusted||!inputTarget(event)||event.button!==0||event.target?.closest?.('.scrollview'))return;
+ const point=coordinates(event);if(!point||pointerContacts.has(event.pointerId))return;
+ const contact={...point,type:event.pointerType,generation:state.input_generation};pointerContacts.set(event.pointerId,contact);
+ event.preventDefault();stage.setPointerCapture(event.pointerId);
+ sendInput({kind:'pointer',phase:'down',id:event.pointerId,pointer_type:event.pointerType,...point},contact.generation);
+});
+stage.addEventListener('pointermove',event=>{
+ if(!event.isTrusted)return;
+ const contact=pointerContacts.get(event.pointerId);
+ if(!contact){
+  if(event.pointerType!=='mouse'&&event.pointerType!=='pen')return;
+  const point=inputTarget(event)&&coordinates(event);
+  if(point){lastCursor={...point,pointer_type:event.pointerType};sendInput({kind:'cursor',phase:'move',...lastCursor})}
+  else if(lastCursor){sendInput({kind:'cursor',phase:'leave',...lastCursor});lastCursor=null}
+  return;
+ }
+ const point=coordinates(event);if(!point){cancelPointer(event.pointerId);return}
+ Object.assign(contact,point);event.preventDefault();
+ sendInput({kind:'pointer',phase:'move',id:event.pointerId,pointer_type:contact.type,...point},contact.generation);
+});
+stage.addEventListener('pointerup',event=>{
+ const contact=pointerContacts.get(event.pointerId);if(!event.isTrusted||!contact)return;
+ const point=coordinates(event);if(!point){cancelPointer(event.pointerId);return}
+ pointerContacts.delete(event.pointerId);queuedMoves.delete(event.pointerId);event.preventDefault();
+ sendInput({kind:'pointer',phase:'up',id:event.pointerId,pointer_type:contact.type,...point},contact.generation);
+ try{stage.releasePointerCapture(event.pointerId)}catch{}
+});
+for(const name of ['pointercancel','lostpointercapture','pointerleave'])stage.addEventListener(name,event=>{
+ if(!event.isTrusted)return;cancelPointer(event.pointerId);
+ if(name==='pointerleave'&&lastCursor){sendInput({kind:'cursor',phase:'leave',...lastCursor});lastCursor=null}
+});
+addEventListener('blur',()=>{for(const id of [...pointerContacts.keys()])cancelPointer(id)});
+stage.addEventListener('wheel',event=>{if(event.isTrusted&&inputTarget(event)&&!event.target?.closest?.('.scrollview')){const point=coordinates(event);if(!point)return;event.preventDefault();sendInput({kind:'wheel',...point,deltaX:event.deltaX,deltaY:event.deltaY,deltaMode:event.deltaMode})}},{passive:false});
+
+const previewKeys=new Set(['ArrowUp','ArrowDown','Enter','Escape',' ','1','2','3','4','5']);
+addEventListener('keydown',event=>{
+ if(!state||state.fault||!state.key_binding_count||event.isComposing||event.altKey||event.ctrlKey||event.metaKey)return;
+ if(event.target?.closest?.('#bar,input,textarea,select,[contenteditable]:not([contenteditable="false"])'))return;
+ if(!previewKeys.has(event.key))return;
+ event.preventDefault();
+ const generation=state.input_generation;
+ action('key',{key:event.key,repeat:event.repeat,revision:state.revision},()=>state?.input_generation===generation);
+},true);
+document.getElementById('sound').onclick=()=>{soundEnabled=true;for(const item of sounds.values())item.failed=false;drawVideos(state);playAudio();document.getElementById('sound').textContent='已允许播放声音'};
 document.getElementById('reload').onclick=()=>readState().catch(e=>warn(e.message));
 document.getElementById('reset').onclick=()=>{if(state&&confirm('重置本地预览的全部进度？不会影响天马作品或存档。'))action('reset',{revision:state.revision})};
+let lastPoll=0;
+function poll(stamp){if(state&&!busy&&stamp-lastPoll>=(state.frame_binding_count?25:100)){lastPoll=stamp;queue=queue.then(()=>readState()).catch(e=>warn(e.message))}requestAnimationFrame(poll)}
+requestAnimationFrame(poll);
 (async()=>{resources=await(await fetch('resources.json')).json();await readState()})().catch(e=>warn(e.message));
 </script></html>

@@ -1,5 +1,6 @@
-from typing import Literal
+from typing import Annotated,Literal,Union
 import logging
+from pydantic import BaseModel,ConfigDict,Field,StrictInt,field_validator
 from mcp.server.fastmcp import FastMCP
 from .core import Pegasus
 from .ui import UIService
@@ -10,6 +11,60 @@ from .mall import MallUIService, GoodsService
 from .editor import EditorService
 from .player import PlayerService
 from .mall_design import MallDesignService
+
+
+class _PreviewEvent(BaseModel):
+    model_config=ConfigDict(extra='forbid',strict=True,allow_inf_nan=False)
+    generation:str=Field(min_length=1,max_length=100)
+    sequence:int=Field(ge=1,le=9007199254740991)
+
+
+class _PreviewPointer(_PreviewEvent):
+    kind:Literal['pointer']
+    phase:Literal['down','move','up','cancel']
+    id:int=Field(ge=0,le=2147483647)
+    pointer_type:Literal['mouse','touch','pen']
+    x:float=Field(ge=0,le=1920)
+    y:float=Field(ge=0,le=1080)
+
+
+class _PreviewHover(_PreviewEvent):
+    kind:Literal['hover']
+    phase:Literal['enter','leave']
+    name:str=Field(min_length=1,max_length=256)
+    button_generation:int=Field(ge=1)
+
+
+class _PreviewWheel(_PreviewEvent):
+    kind:Literal['wheel']
+    x:float=Field(ge=0,le=1920)
+    y:float=Field(ge=0,le=1080)
+    deltaX:float=Field(ge=-100000,le=100000)
+    deltaY:float=Field(ge=-100000,le=100000)
+    deltaMode:Literal[0,1,2]
+
+    @field_validator('deltaMode',mode='before')
+    @classmethod
+    def exact_integer_mode(cls,value):
+        if type(value) is not int:raise ValueError('deltaMode must be an integer, not bool')
+        return value
+
+
+class _PreviewViewport(_PreviewEvent):
+    kind:Literal['viewport']
+    left:float=Field(ge=-100000,le=100000)
+    top:float=Field(ge=-100000,le=100000)
+    width:float=Field(ge=1,le=32768)
+    height:float=Field(ge=1,le=32768)
+    scale:float=Field(ge=.0001,le=100)
+    pixelRatio:float=Field(ge=.1,le=16)
+    canvasWidth:float=Field(ge=100,le=4096)
+    canvasHeight:float=Field(ge=100,le=4096)
+    clientWidth:float=Field(ge=1,le=32768)
+    clientHeight:float=Field(ge=1,le=32768)
+
+
+PreviewInputEvent=Annotated[Union[_PreviewPointer,_PreviewHover,_PreviewWheel,_PreviewViewport],Field(discriminator='kind')]
 
 
 def create_server(bridge: Pegasus | None = None):
@@ -49,7 +104,7 @@ def create_server(bridge: Pegasus | None = None):
 
     @app.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
     def pegasus_preview_start(manifest_path: str) -> dict:
-        """启动本机 Lua 近似预览，返回 URL/session_id/revision。配置 version=1，script 为配置目录内 Lua 相对路径，assets 为素材ID到相对路径映射，variables 为初值。需 preview 可选依赖；独立本地进度，不运行 Unity，不写天马存档；两小时闲置自动停止，MCP 宿主断开清理子进程也可能结束预览。"""
+        """启动本机 Lua 浏览器预览，返回 URL/session_id/revision。配置 version=1，script、assets及video_assets均为配置目录内相对路径，variables为初值。MP4流式播放并回传真实时间/结束事件；instruction_limit可配置100000–200000000，默认5000000。需preview依赖；非Unity，不写天马存档，两小时闲置停止，MCP宿主清理子进程也可能结束预览。"""
         return preview.start(manifest_path)
 
     @app.tool(annotations={**readonly, "openWorldHint": False})
@@ -61,6 +116,18 @@ def create_server(bridge: Pegasus | None = None):
     def pegasus_preview_click(session_id: str, name: str, expected_revision: int) -> dict:
         """按控件 name 执行本地 Lua 点击；expected_revision 必须匹配最近 state，拒绝过期点击。不操作鼠标键盘或原生天马。"""
         return preview.click(session_id, name, expected_revision)
+
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
+    def pegasus_preview_key(session_id: str,
+                            key: Literal['ArrowUp', 'ArrowDown', 'Enter', 'Escape', ' ', '1', '2', '3', '4', '5'],
+                            expected_revision: int, repeat: bool = False) -> dict:
+        """向指定本地预览发送规范按键和 repeat；expected_revision 必须匹配最近 state。Lua 通过 pegasusBindPreviewKeys(fn) 注册 fn(key,repeat)，后绑定优先，返回真停止派发；返回的解绑函数可重复调用，最多64项。仅浏览器近似预览，不控制 Windows 或原生天马键盘。"""
+        return preview.key(session_id, key, expected_revision, repeat)
+
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
+    def pegasus_preview_input(session_id: str, event: PreviewInputEvent, expected_revision: StrictInt) -> dict:
+        """发送严格有界的本地 raw pointer/hover/wheel/viewport。event 必须含 kind、generation=观测时 state.input_generation、sequence=最近 state.input_sequence+1；expected_revision 匹配 state。pointer: phase(down/move/up/cancel)、id、pointer_type(mouse/touch/pen)、x(0..1920)、y(0..1080)，须 down 序列；hover: phase(enter/leave)、name、button_generation=objects[name].preview_generation；wheel: x(0..1920)/y(0..1080，事件发生点)、deltaX/deltaY/deltaMode；viewport: left/top/width/height/scale/pixelRatio/canvasWidth/canvasHeight/clientWidth/clientHeight。拒绝额外字段、非有限数、重放和旧控件/modal。Lua pegasusBindPreviewInput(fn(event)) 与 pegasusBindPreviewFrames(fn(seconds,frame)) 各64项，返回取消函数；帧由真实服务时钟泵驱动。pegasusReadPreviewViewport() 测量前 nil，pegasusPreviewNow() 单调秒。不操作 Windows/原生输入，不将 ac click 当手势。"""
+        return preview.input(session_id, event.model_dump() if isinstance(event,BaseModel) else event, expected_revision)
 
     @app.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
     def pegasus_preview_reset(session_id: str, expected_revision: int) -> dict:
@@ -157,7 +224,7 @@ def create_server(bridge: Pegasus | None = None):
 
     @app.tool(annotations=readonly)
     def pegasus_read(resource: Literal["game", "scenes", "commands", "variables", "arrays", "ui_catalog", "ui_template", "story_tree", "mall_ui", "goods"], game_id: int, scene_id: int | None = None, catalog_id: int | None = None, ui_id: str | None = None) -> dict:
-        """从后台读取作品/场景/指令/变量/故事线；commands 与 story_tree 必须提供 scene_id；mall_ui 须提供 catalog_id 和 ui_id；goods 返回商品列表。"""
+        """从后台读取作品/场景/指令/变量/故事线；commands/story_tree须scene_id，mall_ui须catalog_id/ui_id。commands返回精确source_sha256供版本校验；source_redacted=true时展示源码已脱敏，勿按展示文本计算哈希。goods返回商品列表。"""
         return bridge.read(resource, game_id, scene_id, catalog_id, ui_id)
 
     @app.tool(annotations={"destructiveHint": False})
@@ -169,6 +236,41 @@ def create_server(bridge: Pegasus | None = None):
     def pegasus_upload_image(game_id: int, image_path: str, alias: str, category_id: Literal[1, 2], checkpoint: str) -> dict:
         """经用户授权，将一个本地 PNG 上传到指定作品；1=背景、2=组件。独立检查点可避免重复上传。"""
         return UIService(bridge).upload_image(game_id, image_path, alias, category_id, checkpoint)
+
+    @app.tool(annotations={**readonly, "openWorldHint": True})
+    def pegasus_image_catalog(game_id: int, category_id: Literal[1, 2] = 2) -> dict:
+        """读取作品背景或组件图片分类。得到 catalog_id 后可用 pegasus_video_catalog 分页核对登记结果。"""
+        return UIService(bridge).image_catalog(game_id, category_id)
+
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
+    def pegasus_upload_video(game_id: int, video_path: str, alias: str, checkpoint: str) -> dict:
+        """将本地 H.264 MP4 和封面导入作品原生视频库；需 ffprobe/ffmpeg。持久检查点支持续传；注册不确定时先核对，不自动重发。"""
+        from .video import VideoService
+        return VideoService(bridge).upload_video(game_id,video_path,alias,checkpoint)
+
+    @app.tool(annotations={**readonly, "openWorldHint": True})
+    def pegasus_video_catalog(game_id: int, catalog_id: int | None = None, offset: int = 0, limit: int = 100) -> dict:
+        """读取作品原生视频分类；指定 catalog_id 时分页读取分类内容。不是发布或导出视频。"""
+        from .video import VideoService
+        return VideoService(bridge).catalog(game_id,catalog_id,offset,limit)
+
+    @app.tool(annotations={**readonly, "openWorldHint": True})
+    def pegasus_video_upload_status(game_id: int, check_urls: list[str] | None = None) -> dict:
+        """诊断原生上传渠道（不返回令牌）。传check_urls时仅匿名检测最多10个固定素材域URL，不申请上传令牌。均不上传、不注册素材，不宣称额度或审核拒绝原因。"""
+        from .video import VideoService
+        return VideoService(bridge).upload_status(game_id, check_urls)
+
+    @app.tool(annotations={**readonly, "openWorldHint": True})
+    def pegasus_native_config_status(game_id: int, scene_id: int | None = None, check_material_ids: dict[str, list[int]] | None = None) -> dict:
+        """调用编辑器原生config构建GET并返回有界错误摘要，检查远端命令编译兼容性。不同于标准Lua语法校验和源码读回；不发布，不返回配置正文或访问令牌。"""
+        from .scene import SceneService
+        return SceneService(bridge).native_config_status(game_id, scene_id, check_material_ids)
+
+    @app.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True})
+    def pegasus_cache_materials(game_id: int, manifest_path: str, checkpoint: str) -> dict:
+        """补齐原生素材导入的本机预览缓存：清单checkpoints列已登记的上传检查点。核对自有素材目录的ID/URL/字节数与本地SHA，备份缓存冲突并原子写入原生路径。不会改变云端审核或访问状态。"""
+        from .material_cache import MaterialCacheService
+        return MaterialCacheService(bridge).cache(game_id,manifest_path,checkpoint)
 
     @app.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
     def pegasus_apply_ui_template(game_id: int, section: Literal['cover', 'configuration', 'record', 'playback', 'menu'], template: dict, expected_sha256: str, backup_directory: str) -> dict:
