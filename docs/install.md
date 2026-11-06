@@ -29,7 +29,7 @@ uv tool install --python 3.12 ".\pegasus_bridge-0.17.1+local.26-py3-none-any.whl
 ## 从源码安装
 
 ```powershell
-git clone --branch optimization/local-0.17.1-26 https://github.com/15973081/pegasus-bridge.git
+git clone https://github.com/15973081/pegasus-bridge.git
 cd pegasus-bridge
 uv tool install --python 3.12 ".[preview,qa]"
 ```
