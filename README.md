@@ -4,7 +4,7 @@
 
 Pegasus Bridge 是面向 **Windows 天马工坊编辑器（PegasusEditor）** 的第三方适配工具，非官方产品。它提供终端命令 `pegasus` 和标准 stdio MCP 服务 `pegasus-mcp`，两种入口共用同一套功能，不修改编辑器安装文件。
 
-**主分支版本 · 0.17.1+local.26 · Windows · Python 3.12+ · 68 个 MCP 工具**
+**主分支版本 · 0.17.1+local.27 · Windows · Python 3.12+ · 70 个 MCP 工具**
 
 [快速开始](#快速开始) · [功能一览](#功能一览) · [案例与截图](#案例与截图) · [测试结果](#测试结果) · [完整文档](#完整文档)
 
@@ -60,7 +60,7 @@ uv tool install --python 3.12 ".[preview,qa]"
 pegasus doctor-mcp
 ```
 
-安装到独立用户环境，无需管理员权限。`doctor-mcp` 会实际启动 MCP 子进程，检查初始化、工具发现和状态调用。当前主分支应返回版本 `0.17.1+local.26` 和 `tool_count: 68`。如果命令未加入 PATH，运行 `uv tool dir --bin` 查看命令目录。
+安装到独立用户环境，无需管理员权限。`doctor-mcp` 会实际启动 MCP 子进程，检查初始化、工具发现和状态调用。当前主分支应返回版本 `0.17.1+local.27` 和 `tool_count: 70`。如果命令未加入 PATH，运行 `uv tool dir --bin` 查看命令目录。
 
 也支持本地 wheel / Windows ZIP 安装，详见 [安装与升级](docs/install.md)。目前不通过 PyPI 或插件市场分发。
 
@@ -159,6 +159,8 @@ pegasus save-draft 123456 "第一章_立绘完成" --checkpoint .\exports\draft-
 
 ## 测试结果
 
+**0.17.1+local.27。** 401 项测试中 379 项通过，22 项按环境或配置跳过。真实 stdio 客户端发现 70 个工具。原始视频选项 Lua 已在浏览器中验证按钮底图、选项点击、空回调和后续视频资源。
+
 **0.17.1+local.26。** 398 项自动化测试中 397 项通过，1 项跳过。实际 stdio 会话核验 68 个 MCP 工具。浏览器回归覆盖视频续播、真实鼠标和键盘输入，以及带底图的按钮文字与点击。
 
 **0.17.0，本机验证日期：2026-10-29。** 共 248 项单元测试，246 项通过、2 项因 Windows 符号链接权限跳过。真实 stdio MCP 发现 60 个工具；以每页 2 个作品遍历 3 页，核对当前账号 5 个作品，名称和 ID 均定位到测试作品 2452144。多候选、截断和无匹配返回状态均通过实测。详见 [后台作品查找](docs/game-discovery.md)。
@@ -222,3 +224,5 @@ uv run pegasus preview-report examples/workflows/preview.json examples/workflows
 ## 项目修改与原生验收（0.16）
 
 新增 `change-plan`、`change-apply`、`change-reverse-plan`，把剧情、基础 UI 和故事线纳入统一的冻结计划、冲突预检、备份保存及反向恢复。另提供 `native-qa-begin`、`native-qa-report`，记录原生人工试玩观察与证据哈希；不自动启动试玩，不把进程状态当作验收通过。使用清单与限制见 [项目修改与原生验收](docs/project-changes.md)。
+
+剧情分支、视频选项预览及接线修改见 [Codex 调用技能](skills/pegasus-story/SKILL.md)。

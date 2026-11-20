@@ -146,6 +146,15 @@ function draw(data){
     if(!item.artwork){const im=document.createElement('img');im.alt='';item.artwork=im;el.prepend(im)}
     buttonArtwork(item);
    }else if(item.artwork){item.artwork.remove();item.artwork=null}
+   if(cfg.preview_option_art && item.artwork){
+    const art=item.artwork;
+    const layout=()=>{if(!art.naturalWidth)return;
+     Object.assign(el.style,{width:art.naturalWidth+'px',height:art.naturalHeight+'px',
+      left:(x-art.naturalWidth*ax/100)+'px',top:(ph-y-art.naturalHeight*(1-ay/100))+'px'})};
+    art.onload=layout;layout();
+    el.onpointerdown=()=>{if(resources[cfg.pressed_resId])imageSource(art,resources[cfg.pressed_resId])};
+    el.onpointerup=el.onpointercancel=()=>buttonArtwork(item);
+   }
    if(!item.label){item.label=document.createElement('span');item.label.className='button-label';el.append(item.label)}
    // Artwork and native text coexist. Explicit empty labels belong to raster
    // typography controls and must not fall back to the internal object name.

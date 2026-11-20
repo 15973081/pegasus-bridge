@@ -461,6 +461,38 @@ ac.showUI=function(c)
  assert(#requests<=100,'Too many native UI requests');coroutine.yield()
 end
 setmetatable(ac,{__index=function(_,k)error('Unsupported ac command: '..tostring(k))end})
+ac.createTextStyle=ac.createStyle
+ac.showVideoOption=function(c)
+ name(c)
+ assert(c.execute_until_end==nil or c.execute_until_end==0,'Preview supports immediate video choices')
+ local selected=nil
+ local names={}
+ local function reveal()
+  for i,o in ipairs(c.option_items)do
+   assert(not o.appear_on and not o.disable_on,'Conditional video options require native preview')
+   assert(type(o.click_func)=='function','Video option needs a callback')
+   local key=c.name..':'..i
+   names[#names+1]=key
+   ac.createButton({name=key, text=o.text_content, text_style=o.text_style,
+    pos={o.pos_x,o.pos_y}, anchor={100*(o.pivot_x or 0.5),100*(o.pivot_y or 0.5)},
+    size={540,105}, preview_option_art=true, normal_resId=o.normal_state,
+    pressed_resId=o.click_state, click_func=function()
+     assert(#requests<100,'Too many preview requests')
+     requests[#requests+1]={command='videoOptionClick',name=c.name,video=c.res_id,
+      optionIndex=i,text=o.text_content}
+     selected=o.click_func
+     for _,key in ipairs(names)do ac.remove({name=key})end
+     ac.closeVideo({name=c.name})
+    end})
+  end
+ end
+ ac.showVideo({name=c.name,res_id=c.res_id,events={{time=c.time or 0,action='freeze',func=reveal}}})
+ if selected then selected() end
+end
+ac.createSwitchChapter=function(c)
+ assert(#requests<100,'Too many native requests')
+ requests[#requests+1]={command='createSwitchChapter',chapterId=c.chapterId,chapterName=c.chapterName}
+end
 safe.ac=ac
 safe.print=function(...)
  local out={};for i=1,select('#',...)do out[i]=tostring(select(i,...))end

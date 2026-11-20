@@ -21,7 +21,7 @@
 如本机策略不允许运行脚本，可直接执行同等安装命令，而无需修改策略：
 
 ```powershell
-uv tool install --python 3.12 ".\pegasus_bridge-0.17.1+local.26-py3-none-any.whl[preview,qa]"
+uv tool install --python 3.12 ".\pegasus_bridge-0.17.1+local.27-py3-none-any.whl[preview,qa]"
 ```
 
 如果命令目录尚未在 PATH 中，安装器会打印完整路径。可运行 `uv tool dir --bin` 查看该目录，再从完整路径执行命令。
@@ -106,3 +106,15 @@ python scripts/build_install_bundle.py
 ```
 
 构建器仅打包 wheel、安装器、文档、简单示例和 SHA256 校验清单。不会将编辑器二进制、作品素材、仓库 `.venv` 或本机配置带入 ZIP。
+
+## Codex 剧情分支技能
+
+从仓库根目录执行下列 PowerShell 命令安装调用技能。已配置的 MCP 服务升级后重新连接，在新会话中使用技能。
+
+```powershell
+$skillsDir = Join-Path $env:USERPROFILE '.codex/skills'
+New-Item -ItemType Directory -Force $skillsDir | Out-Null
+Copy-Item -Recurse -Force skills/pegasus-story $skillsDir
+```
+
+可以要求“核对这个选项实际播放哪个视频”，或“把此选项接到已有函数，先给出候选源码”。确认保存时由现有场景写入工具执行备份和版本核对。

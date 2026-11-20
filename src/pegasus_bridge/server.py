@@ -99,6 +99,19 @@ def create_server(bridge: Pegasus | None = None):
         return OrientationVariantService(bridge).create_variant(
             source_game_id, name, orientation, expected_sha256, checkpoint)
 
+    @app.tool(annotations={**readonly, "openWorldHint": False})
+    def pegasus_inspect_video_options(source: str) -> dict:
+        """核对编辑器导出的场景 Lua。返回选项视频 ID、按钮原文、空回调和直接播放/跳转指令。静态结果供路线核对，不执行脚本。"""
+        from .story_options import inspect_options
+        return inspect_options(source)
+
+    @app.tool(annotations={**readonly, "openWorldHint": False})
+    def pegasus_prepare_option_binding(source: str, node: str, index: int,
+                                       expected_text: str, callback: str) -> dict:
+        """准备选项接线修改。node 是视频控件名，index 从 1 开始，callback 是同一作用域的已有局部函数。返回完整候选源码，不保存作品。"""
+        from .story_options import prepare_binding
+        return prepare_binding(source, node, index, expected_text, callback)
+
     from .preview import PreviewService
     preview = PreviewService()
 

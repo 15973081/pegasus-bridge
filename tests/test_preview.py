@@ -541,6 +541,31 @@ later=CltTimer.SetTimeout(function()ac.var.order=ac.var.order..'B'end,0.1)
         self.assertEqual(game.snapshot()['variables']['order'],'AC')
         self.assertFalse(game.advance(10))
 
+    def test_exported_video_option_runs_selected_callback_then_continues(self):
+        game = self.game("""
+ac.createTextStyle({name="s",bold=true})
+ac.showVideoOption({name="menu",res_id="$menu",time=0.5,option_items={
+ {text_content="Stay",click_func=function()end},
+ {text_content="Go",text_style="s",click_func=function()
+  ac.showVideo({name="next",res_id="$next"})
+  ac.createSwitchChapter({chapterId=17})
+ end}
+}})
+ac.var.finished=true
+""")
+        game.video_event(dict(name="menu",generation=1,kind="playing",time=0.5,duration=2))
+        state = game.snapshot()
+        self.assertTrue(state["styles"]["s"]["bold"])
+        self.assertEqual(state["objects"]["menu:2"]["text"], "Go")
+        state = game.click("menu:2", state["revision"])
+        self.assertEqual(state["requests"][-1]["optionIndex"], 2)
+        self.assertFalse(state["objects"])
+        self.assertEqual(state["videos"]["next"]["resId"], "$next")
+        for kind, at in [("playing", 0), ("ended", 2)]:
+            game.video_event(dict(name="next",generation=2,kind=kind,time=at,duration=2))
+        self.assertEqual(game.snapshot()["requests"][-1]["chapterId"], 17)
+        self.assertTrue(game.snapshot()["variables"]["finished"])
+
     def test_delayed_options_appear_while_video_is_frozen(self):
         game=self.game('''
 ac.showVideo({name='v',res_id='$clip',events={{time=0,action='freeze',func=function()

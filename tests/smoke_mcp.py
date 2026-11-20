@@ -14,7 +14,7 @@ async def main():
             await session.initialize()
             tools = await session.list_tools()
             names = [tool.name for tool in tools.tools]
-            assert len(names) == 68, names
+            assert len(names) == 70, names
             by_name = {tool.name: tool for tool in tools.tools}
             for name in ('pegasus_list_games', 'pegasus_resolve_game'):
                 assert by_name[name].annotations.readOnlyHint is True
