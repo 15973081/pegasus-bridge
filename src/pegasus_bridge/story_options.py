@@ -61,6 +61,8 @@ def inspect_options(source):
                     steps.append({"command": kind or "other"})
         result.append({"node": literal(cfg.get("name")), "video": literal(cfg.get("res_id")),
                        "index": index, "text": literal(opt.get("text_content")),
+                       "text_style": literal(opt.get("text_style")),
+                       "option_line": opt["text_content"].first_token.line if "text_content" in opt else None,
                        "callback": getattr(cb, "id", None),
                        "binding": ("unresolved" if not isinstance(body, lua.Block)
                                    else "bound" if body.body else "empty"), "steps": steps})

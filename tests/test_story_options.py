@@ -9,7 +9,7 @@ SCENE = """local function route()
 end
 ac.showVideoOption({name="choice",res_id="$menu",option_items={
     {text_content="留下",click_func=function() end},
-    {text_content="进宫",click_func=route}
+    {text_content="进宫",text_style="style2",click_func=route}
 }})"""
 
 
@@ -18,6 +18,8 @@ class VideoOptionTests(unittest.TestCase):
         rows = inspect_options(SCENE)["options"]
         self.assertEqual(rows[0]["binding"], "empty")
         self.assertEqual(rows[1]["steps"][1]["target"], 17)
+        self.assertIsNone(rows[0]["text_style"])
+        self.assertEqual((rows[1]["text_style"], rows[1]["option_line"]), ("style2", 7))
         edit = prepare_binding(SCENE, "choice", 1, "留下", "route")
         self.assertEqual(edit["source"], SCENE.replace("function() end", "route"))
         self.assertEqual(edit["option"]["steps"], rows[1]["steps"])

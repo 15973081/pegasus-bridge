@@ -101,7 +101,7 @@ def create_server(bridge: Pegasus | None = None):
 
     @app.tool(annotations={**readonly, "openWorldHint": False})
     def pegasus_inspect_video_options(source: str) -> dict:
-        """核对编辑器导出的场景 Lua。返回选项视频 ID、按钮原文、空回调和直接播放/跳转指令。静态结果供路线核对，不执行脚本。"""
+        """核对编辑器导出的场景 Lua。返回选项视频 ID、按钮原文、文字样式引用 text_style、文案所在行 option_line（从 1 开始）、空回调和直接播放/跳转指令。静态结果供路线核对，不执行脚本。"""
         from .story_options import inspect_options
         return inspect_options(source)
 
