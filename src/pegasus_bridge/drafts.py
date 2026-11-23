@@ -109,6 +109,9 @@ class DraftService(UIService):
                 before = self._list(api, game_id)
                 if any(row['backupName'] == name for row in before):
                     raise BridgeError('已存在同名原生草稿；请换名，或使用此前创建的检查点核对')
+                manual_count = sum(row['isAuto'] == 0 for row in before)
+                if manual_count >= 10:
+                    raise BridgeError(f'未创建备份：已有 {manual_count} 份手动备份，已达 10 份上限。请先腾出一个名额，再用同一检查点保存。')
                 record = dict(version=1, game_id=game_id, name=name, status='requesting',
                               before_ids=[row['id'] for row in before],
                               requested_at=datetime.now(timezone.utc).isoformat())

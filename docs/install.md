@@ -21,7 +21,7 @@
 如本机策略不允许运行脚本，可直接执行同等安装命令，而无需修改策略：
 
 ```powershell
-uv tool install --python 3.12 ".\pegasus_bridge-0.17.1+local.27-py3-none-any.whl[preview,qa]"
+uv tool install --python 3.12 ".\pegasus_bridge-0.17.1+local.28-py3-none-any.whl[preview,qa]"
 ```
 
 如果命令目录尚未在 PATH 中，安装器会打印完整路径。可运行 `uv tool dir --bin` 查看该目录，再从完整路径执行命令。

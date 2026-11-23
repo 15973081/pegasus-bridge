@@ -91,6 +91,16 @@ class DraftTests(unittest.TestCase):
         self.assertTrue(self.save(service)['complete'])
         self.assertEqual(self.calls.count('POST'), 1)
 
+    def test_full_manual_quota_then_retry_same_checkpoint(self):
+        self.rows = [row(i) for i in range(1, 11)]
+        with self.assertRaisesRegex(BridgeError, '10 份上限'):
+            self.save()
+        self.assertEqual(self.calls, ['GET'])
+        self.assertFalse(self.cp.exists())
+        self.rows.pop()
+        self.assertTrue(self.save()['verified'])
+        self.assertEqual(self.calls.count('POST'), 1)
+
     def test_preexisting_name_refuses_creation(self):
         self.rows.append(row(10, '测试草稿'))
         with self.assertRaisesRegex(BridgeError, '同名'): self.save()

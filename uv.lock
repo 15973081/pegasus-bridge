@@ -464,7 +464,7 @@ wheels = [
 
 [[package]]
 name = "pegasus-bridge"
-version = "0.17.1+local.27"
+version = "0.17.1+local.28"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
